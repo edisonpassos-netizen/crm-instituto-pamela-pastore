@@ -92,8 +92,25 @@ function clearSessionCookie() {
 
 async function supabaseRequest(method, query = '', body = null) {
   const url = TABLE_URL() + query;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!process.env.SUPABASE_URL || !key) throw new Error('Configuração do Supabase incompleta no servidor.');
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  const supabaseUrl = (process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
+  if (!supabaseUrl || !key) {
+    console.error('CRM Supabase configuration check:', {
+      hasUrl: Boolean(supabaseUrl),
+      hasKey: Boolean(key),
+      keyLooksPublic: key.startsWith('sb_publishable_'),
+      keyLooksSecret: key.startsWith('sb_secret_')
+    });
+    const err = new Error('Configuração do Supabase incompleta no servidor. Confira SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no Netlify.');
+    err.status = 500;
+    throw err;
+  }
+  if (key.startsWith('sb_publishable_')) {
+    console.error('CRM Supabase configuration check: SUPABASE_SERVICE_ROLE_KEY contains a publishable key, not a server secret.');
+    const err = new Error('A chave recebida pela função do CRM é pública. No Netlify, configure a chave sb_secret_ em SUPABASE_SERVICE_ROLE_KEY com escopo Functions e contexto Production; depois publique novamente.');
+    err.status = 500;
+    throw err;
+  }
   const headers = { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' };
   const options = { method, headers };
   if (body !== null) {
@@ -102,11 +119,23 @@ async function supabaseRequest(method, query = '', body = null) {
     options.body = JSON.stringify(body);
   }
   const response = await fetch(url, options);
-  const text = await response.text();
+  const responseText = await response.text();
   let parsed = null;
-  try { parsed = text ? JSON.parse(text) : null; } catch {}
+  try { parsed = responseText ? JSON.parse(responseText) : null; } catch {}
   if (!response.ok) {
-    const err = new Error(`Supabase respondeu HTTP ${response.status}.`);
+    // Log only Supabase's non-secret error details; never log request headers or keys.
+    console.error('CRM Supabase request failed:', {
+      status: response.status,
+      code: parsed?.code || null,
+      message: parsed?.message || null,
+      keyLooksSecret: key.startsWith('sb_secret_'),
+      keyLooksLegacyServiceRole: key.startsWith('eyJ'),
+      urlMatchesExpectedProject: supabaseUrl === 'https://pposribyzhxyupbxrpfo.supabase.co'
+    });
+    const detail = response.status === 401
+      ? 'Supabase recusou a chave configurada no servidor (HTTP 401). Confira se SUPABASE_SERVICE_ROLE_KEY é a chave secreta do mesmo projeto indicado em SUPABASE_URL.'
+      : `Supabase respondeu HTTP ${response.status}.`;
+    const err = new Error(detail);
     err.status = response.status;
     throw err;
   }
