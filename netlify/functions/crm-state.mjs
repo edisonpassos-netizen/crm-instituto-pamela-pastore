@@ -11,12 +11,19 @@ const json = (statusCode, body, extraHeaders = {}) => new Response(JSON.stringif
 function allowedOrigin(request) {
   const expected = (process.env.CRM_ALLOWED_ORIGIN || 'https://peppy-salamander-2d8776.netlify.app').trim().replace(/\/$/, '');
   const origin = (request.headers.get('origin') || '').trim().replace(/\/$/, '');
-  return Boolean(expected && origin && origin === expected);
+  // Same-origin GET/HEAD requests may omit Origin; validate the function URL in that case.
+  let requestOrigin = '';
+  try { requestOrigin = new URL(request.url).origin.replace(/\/$/, ''); } catch {}
+  if (!expected) return false;
+  if (origin) return origin === expected;
+  return requestOrigin === expected && ['GET', 'HEAD'].includes(request.method);
 }
 
 function corsHeaders(request) {
-  const origin = request.headers.get('origin') || '';
-  return { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin', 'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600' };
+  const origin = (request.headers.get('origin') || '').trim().replace(/\/$/, '');
+  const headers = { 'Vary': 'Origin', 'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600' };
+  if (origin) headers['Access-Control-Allow-Origin'] = origin;
+  return headers;
 }
 
 async function supabaseRequest(method, query = '', body = null) {
