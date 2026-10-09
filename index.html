@@ -125,7 +125,7 @@ async function requestCloud(method="GET",payload=null){
  return result;
 }
 async function checkCRMAuth(){
- const response=await fetch(API_URL+"/session",{method:"GET",credentials:"same-origin",headers:{"Accept":"application/json"}});
+ const response=await fetch(API_URL+"?action=session",{method:"GET",credentials:"same-origin",headers:{"Accept":"application/json"}});
  return response.ok;
 }
 function showLogin(message=""){
@@ -152,7 +152,7 @@ document.getElementById("authForm").addEventListener("submit",async e=>{
  const button=document.getElementById("authSubmit"),error=document.getElementById("authError"),password=document.getElementById("authPassword").value;
  button.disabled=true;button.textContent="Validando…";error.textContent="";
  try{
-   const response=await fetch(API_URL+"/login",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({password})});
+   const response=await fetch(API_URL+"?action=login",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({password})});
    const result=await response.json().catch(()=>({error:"Resposta inválida do servidor"}));
    if(!response.ok)throw new Error(result.error||"Não foi possível entrar.");
    document.getElementById("authPassword").value="";
