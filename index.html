@@ -179,7 +179,7 @@ async function saveStore(){
      setDbStatus("Supabase conectado • dados na nuvem","ok");
    }catch(err){
      cloudWarning="Nuvem indisponível: alterações salvas somente neste navegador. Não feche sem exportar backup.";
-     setDbStatus("Modo local • nuvem indisponível","warn");
+     setDbStatus("Nuvem indisponível • "+String(err?.message||"erro não identificado").slice(0,90),"warn");
      console.error("Falha ao persistir no Supabase:",err);
    }
  });
@@ -204,7 +204,7 @@ async function loadStore(){
  }catch(err){
    cloudAvailable=false;
    cloudWarning="Nuvem indisponível: alterações salvas somente neste navegador. Não feche sem exportar backup.";
-   setDbStatus("Modo local • nuvem indisponível","warn");
+   setDbStatus("Nuvem indisponível • "+String(err?.message||"erro não identificado").slice(0,90),"warn");
    console.error("Falha ao carregar estado remoto:",err);
  }
 }
