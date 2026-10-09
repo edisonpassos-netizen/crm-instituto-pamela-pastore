@@ -1,0 +1,51 @@
+name: Validate CRM code
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check Netlify function syntax
+        run: node --check netlify/functions/crm-state.mjs
+      - name: Check inline JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class Scripts(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.active = False
+                  self.external = False
+                  self.parts = []
+                  self.all = []
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower() == "script":
+                      self.active = True
+                      self.external = any(k.lower() == "src" for k, _ in attrs)
+                      self.parts = []
+              def handle_data(self, data):
+                  if self.active and not self.external:
+                      self.parts.append(data)
+              def handle_endtag(self, tag):
+                  if tag.lower() == "script" and self.active:
+                      if not self.external:
+                          self.all.append("".join(self.parts))
+                      self.active = False
+          p = Scripts()
+          p.feed(Path("index.html").read_text(encoding="utf-8"))
+          if not p.all:
+              raise SystemExit("No inline JavaScript found in index.html")
+          Path("/tmp/crm-inline.js").write_text("\n;\n".join(p.all), encoding="utf-8")
+          print(f"Extracted {len(p.all)} inline script block(s)")
+          PY
+          node --check /tmp/crm-inline.js
