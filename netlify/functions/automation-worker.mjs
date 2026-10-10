@@ -77,17 +77,25 @@ async function sendWhatsAppTemplate(job) {
       parameters: p.template_parameters.map(value => ({ type: 'text', text: String(value).slice(0, 500) }))
     });
   }
-  const response = await fetch(`https://graph.facebook.com/v23.0/${phoneNumberId}/messages`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  let response;
+  try {
+    response = await fetch(`https://graph.facebook.com/v23.0/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to,
       type: 'template',
       template: { name: templateName, language: { code: languageCode }, ...(components.length ? { components } : {}) }
-    })
-  });
+      })
+    });
+  } catch (cause) {
+    const error = new Error('Resultado de envio indeterminado: a conexão falhou após iniciar a chamada; não repetir automaticamente.');
+    error.code = 'DELIVERY_UNKNOWN';
+    error.cause = cause;
+    throw error;
+  }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(`WhatsApp API HTTP ${response.status}: ${body?.error?.code || 'falha no envio'}`);
@@ -146,15 +154,16 @@ async function processJob(job) {
     });
   } catch (error) {
     const message = String(error?.message || 'Falha desconhecida').slice(0, MAX_ERROR_LENGTH);
+    const ambiguous = error?.code === 'DELIVERY_UNKNOWN';
     const terminal = job.attempts >= job.max_attempts;
-    const nextStatus = terminal ? 'dead_letter' : 'retry';
+    const nextStatus = ambiguous ? 'delivery_unknown' : terminal ? 'dead_letter' : 'retry';
     const nextAt = new Date(Date.now() + retryDelaySeconds(job.attempts) * 1000).toISOString();
-    try { await logAttempt(job, terminal ? 'failed' : 'retry_scheduled', message); } catch (logError) {
+    try { await logAttempt(job, ambiguous ? 'failed' : terminal ? 'failed' : 'retry_scheduled', message); } catch (logError) {
       console.error('automation attempt log failed:', logError?.message || 'unknown');
     }
     await updateJob(job, {
       status: nextStatus, locked_at: null, last_error: message,
-      ...(terminal ? {} : { scheduled_at: nextAt })
+      ...(terminal || ambiguous ? {} : { scheduled_at: nextAt })
     });
   }
 }
@@ -191,4 +200,4 @@ export default async () => {
   }
 };
 
-export const __test = { retryDelaySeconds, isReviewEligible, reviewMessage, processJob };
+export const __test = { retryDelaySeconds, isReviewEligible, reviewMessage, processJob, sendWhatsAppTemplate };
