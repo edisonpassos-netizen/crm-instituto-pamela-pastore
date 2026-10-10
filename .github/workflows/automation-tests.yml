@@ -1,0 +1,20 @@
+name: Automation worker tests
+on:
+  push:
+    branches: [feature/automation-engine]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check worker syntax
+        run: node --check netlify/functions/automation-worker.mjs
+      - name: Run automation unit tests
+        run: node --test tests/automation-worker.test.mjs
