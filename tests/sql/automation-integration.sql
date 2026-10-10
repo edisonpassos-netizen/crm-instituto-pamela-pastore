@@ -30,6 +30,25 @@ BEGIN
     RAISE EXCEPTION 'Unexpected claimed state: status %, attempts %', claimed.status, claimed.attempts;
   END IF;
 
+  -- Simulate a worker crash: stale processing lock must be reclaimed.
+  UPDATE public.crm_automation_queue
+  SET status = 'processing', locked_at = now() - interval '11 minutes'
+  WHERE id = first_id;
+
+  SELECT * INTO claimed
+  FROM public.claim_due_automation_jobs(10)
+  WHERE id = first_id;
+
+  IF claimed.id IS NULL THEN
+    RAISE EXCEPTION 'Stale processing task was not recovered';
+  END IF;
+  IF claimed.status <> 'processing' OR claimed.attempts <> 2 THEN
+    RAISE EXCEPTION 'Stale lock recovery did not increment attempts: status %, attempts %', claimed.status, claimed.attempts;
+  END IF;
+  IF claimed.locked_at < now() - interval '1 minute' THEN
+    RAISE EXCEPTION 'Recovered task still has stale lock timestamp';
+  END IF;
+
   IF has_table_privilege('anon', 'public.crm_automation_queue', 'SELECT') THEN
     RAISE EXCEPTION 'anon must not have SELECT on automation queue';
   END IF;
