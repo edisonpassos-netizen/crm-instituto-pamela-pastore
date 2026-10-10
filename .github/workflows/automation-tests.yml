@@ -15,9 +15,9 @@ jobs:
         with:
           node-version: 20
       - name: Check worker syntax
-        run: node --check netlify/functions/automation-worker.mjs
+        run: node --check netlify/functions/automation-worker.mjs && node --check netlify/functions/lib/automation-event-adapter.mjs
       - name: Run automation unit and lifecycle tests
-        run: node --test tests/automation-worker.test.mjs tests/automation-lifecycle.test.mjs
+        run: node --test tests/automation-worker.test.mjs tests/automation-lifecycle.test.mjs tests/automation-event-adapter.test.mjs tests/whatsapp-api-mock.test.mjs
 
   database-integration:
     runs-on: ubuntu-latest
@@ -46,5 +46,7 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/automation-test-roles.sql
       - name: Apply proposed migration to ephemeral PostgreSQL
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610100001_automation_engine.sql
-      - name: Test deduplication, atomic claim, and closed public access
+      - name: Test deduplication, atomic claim, stale lock recovery, and closed public access
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/automation-integration.sql
+      - name: Apply proposed ambiguous-delivery migration to ephemeral PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610100002_delivery_unknown.sql
