@@ -16,8 +16,8 @@ jobs:
           node-version: 20
       - name: Check worker syntax
         run: node --check netlify/functions/automation-worker.mjs
-      - name: Run automation unit tests
-        run: node --test tests/automation-worker.test.mjs
+      - name: Run automation unit and lifecycle tests
+        run: node --test tests/automation-worker.test.mjs tests/automation-lifecycle.test.mjs
 
   database-integration:
     runs-on: ubuntu-latest
