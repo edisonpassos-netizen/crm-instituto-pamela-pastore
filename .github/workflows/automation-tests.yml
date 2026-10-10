@@ -50,3 +50,5 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/automation-integration.sql
       - name: Apply proposed ambiguous-delivery migration to ephemeral PostgreSQL
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610100002_delivery_unknown.sql
+      - name: Apply proposed WhatsApp provider-status migration to ephemeral PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610100003_whatsapp_status.sql
