@@ -62,12 +62,25 @@ async function sendWhatsAppTemplate(job) {
   const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || '').trim();
   const templateName = (process.env.WHATSAPP_TEMPLATE_NAME || '').trim();
   const languageCode = (process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'pt_BR').trim();
+  const apiVersion = (process.env.WHATSAPP_GRAPH_API_VERSION || 'v23.0').trim();
   if (!token || !phoneNumberId || !templateName) {
     throw new Error('WhatsApp oficial não configurado: faltam credenciais ou modelo aprovado.');
   }
-  if (!/^\d+$/.test(phoneNumberId)) throw new Error('WHATSAPP_PHONE_NUMBER_ID inválido.');
-  const to = String(job.recipient_phone || '').replace(/\D/g, '');
+  if (!/^\\d+$/.test(phoneNumberId)) throw new Error('WHATSAPP_PHONE_NUMBER_ID inválido.');
+  if (!/^v\\d+\\.0$/.test(apiVersion)) throw new Error('WHATSAPP_GRAPH_API_VERSION inválida.');
+  const to = String(job.recipient_phone || '').replace(/\\D/g, '');
   if (to.length < 10 || to.length > 15) throw new Error('Telefone do destinatário inválido.');
+
+  // This branch is test-only: outbound sends require an explicit test-mode
+  // switch and a strict allowlist of operator-controlled test numbers.
+  if (process.env.WHATSAPP_TEST_MODE !== 'true') {
+    throw new Error('Envio bloqueado: WHATSAPP_TEST_MODE não está habilitado.');
+  }
+  const allowedRecipients = (process.env.WHATSAPP_TEST_RECIPIENTS || '')
+    .split(',').map(value => value.replace(/\\D/g, '')).filter(Boolean);
+  if (!allowedRecipients.includes(to)) {
+    throw new Error('Envio bloqueado: destinatário não consta na lista de teste.');
+  }
 
   const p = job.payload || {};
   const components = [];
@@ -79,7 +92,7 @@ async function sendWhatsAppTemplate(job) {
   }
   let response;
   try {
-    response = await fetch(`https://graph.facebook.com/v23.0/${phoneNumberId}/messages`, {
+    response = await fetch(`https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
