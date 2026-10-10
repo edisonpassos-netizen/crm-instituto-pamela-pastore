@@ -191,4 +191,4 @@ export default async () => {
   }
 };
 
-export const __test = { retryDelaySeconds, isReviewEligible, reviewMessage };
+export const __test = { retryDelaySeconds, isReviewEligible, reviewMessage, processJob };
