@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { enqueueAutomationEvents } from './lib/automation-enqueue.mjs';
 
 const DEFAULT_ORIGIN = 'https://peppy-salamander-2d8776.netlify.app';
 const SESSION_COOKIE = 'crm_session';
@@ -215,7 +216,26 @@ export default async (request) => {
     if (!Array.isArray(rows) || !rows.length) {
       return json(409, { error: 'O CRM foi alterado em outra sessão. Atualize os dados antes de tentar novamente.' }, cors);
     }
-    return json(200, { revision: Number(rows[0].revision), updatedAt: rows[0].updated_at }, cors);
+
+    // Queue only explicit domain events, and only after the CRM state write succeeds.
+    // Queue failures are reported separately: never tell the client the CRM save failed
+    // after the database has already committed it.
+    let automation = { acceptedEventIds: [], failures: [] };
+    if (payload.automationEvents !== undefined) {
+      try {
+        automation = await enqueueAutomationEvents(payload.automationEvents);
+      } catch (error) {
+        automation = {
+          acceptedEventIds: [],
+          failures: [{ clientEventId: null, message: String(error?.message || 'Queue unavailable').slice(0, 200) }]
+        };
+      }
+    }
+    return json(200, {
+      revision: Number(rows[0].revision),
+      updatedAt: rows[0].updated_at,
+      automation
+    }, cors);
   } catch (error) {
     console.error('crm-state function error:', error?.message || 'unknown error');
     return json(error?.status || 500, { error: error?.message || 'Erro inesperado ao acessar o banco remoto.' }, cors);
