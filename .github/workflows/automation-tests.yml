@@ -1,4 +1,4 @@
-name: Automation worker tests
+name: Automation worker and database integration tests
 on:
   push:
     branches: [feature/automation-engine]
@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,3 +18,33 @@ jobs:
         run: node --check netlify/functions/automation-worker.mjs
       - name: Run automation unit tests
         run: node --test tests/automation-worker.test.mjs
+
+  database-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: automation_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d automation_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: test-only-password
+      PGDATABASE: automation_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create test-only Supabase roles
+        run: psql -v ON_ERROR_STOP=1 -f tests/sql/automation-test-roles.sql
+      - name: Apply proposed migration to ephemeral PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610100001_automation_engine.sql
+      - name: Test deduplication, atomic claim, and closed public access
+        run: psql -v ON_ERROR_STOP=1 -f tests/sql/automation-integration.sql
