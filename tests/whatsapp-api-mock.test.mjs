@@ -12,13 +12,17 @@ test('WhatsApp success response returns provider message id using mocked fetch o
     phone: process.env.WHATSAPP_PHONE_NUMBER_ID,
     template: process.env.WHATSAPP_TEMPLATE_NAME,
     language: process.env.WHATSAPP_TEMPLATE_LANGUAGE,
+    testMode: process.env.WHATSAPP_TEST_MODE,
+    recipients: process.env.WHATSAPP_TEST_RECIPIENTS,
     fetch: globalThis.fetch
   };
   Object.assign(process.env, {
     WHATSAPP_ACCESS_TOKEN: 'test-token-not-real',
     WHATSAPP_PHONE_NUMBER_ID: '123456789',
     WHATSAPP_TEMPLATE_NAME: 'test_template',
-    WHATSAPP_TEMPLATE_LANGUAGE: 'pt_BR'
+    WHATSAPP_TEMPLATE_LANGUAGE: 'pt_BR',
+    WHATSAPP_TEST_MODE: 'true',
+    WHATSAPP_TEST_RECIPIENTS: '5515999999999'
   });
   let captured;
   globalThis.fetch = async (url, options) => {
@@ -37,7 +41,9 @@ test('WhatsApp success response returns provider message id using mocked fetch o
       WHATSAPP_ACCESS_TOKEN: previous.token,
       WHATSAPP_PHONE_NUMBER_ID: previous.phone,
       WHATSAPP_TEMPLATE_NAME: previous.template,
-      WHATSAPP_TEMPLATE_LANGUAGE: previous.language
+      WHATSAPP_TEMPLATE_LANGUAGE: previous.language,
+      WHATSAPP_TEST_MODE: previous.testMode,
+      WHATSAPP_TEST_RECIPIENTS: previous.recipients
     })) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
@@ -49,11 +55,15 @@ test('WhatsApp API rejection is surfaced without exposing credentials', async ()
     token: process.env.WHATSAPP_ACCESS_TOKEN,
     phone: process.env.WHATSAPP_PHONE_NUMBER_ID,
     template: process.env.WHATSAPP_TEMPLATE_NAME,
+    testMode: process.env.WHATSAPP_TEST_MODE,
+    recipients: process.env.WHATSAPP_TEST_RECIPIENTS,
     fetch: globalThis.fetch
   };
   process.env.WHATSAPP_ACCESS_TOKEN = 'test-token-not-real';
   process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
   process.env.WHATSAPP_TEMPLATE_NAME = 'test_template';
+  process.env.WHATSAPP_TEST_MODE = 'true';
+  process.env.WHATSAPP_TEST_RECIPIENTS = '5515999999999';
   globalThis.fetch = async () => fakeResponse(400, { error: { code: 132000, message: 'template parameter mismatch' } });
   try {
     await assert.rejects(
@@ -65,6 +75,8 @@ test('WhatsApp API rejection is surfaced without exposing credentials', async ()
     if (previous.token === undefined) delete process.env.WHATSAPP_ACCESS_TOKEN; else process.env.WHATSAPP_ACCESS_TOKEN = previous.token;
     if (previous.phone === undefined) delete process.env.WHATSAPP_PHONE_NUMBER_ID; else process.env.WHATSAPP_PHONE_NUMBER_ID = previous.phone;
     if (previous.template === undefined) delete process.env.WHATSAPP_TEMPLATE_NAME; else process.env.WHATSAPP_TEMPLATE_NAME = previous.template;
+    if (previous.testMode === undefined) delete process.env.WHATSAPP_TEST_MODE; else process.env.WHATSAPP_TEST_MODE = previous.testMode;
+    if (previous.recipients === undefined) delete process.env.WHATSAPP_TEST_RECIPIENTS; else process.env.WHATSAPP_TEST_RECIPIENTS = previous.recipients;
   }
 });
 
@@ -75,6 +87,8 @@ test('ambiguous WhatsApp timeout enters delivery_unknown and is not automaticall
     token: process.env.WHATSAPP_ACCESS_TOKEN,
     phone: process.env.WHATSAPP_PHONE_NUMBER_ID,
     template: process.env.WHATSAPP_TEMPLATE_NAME,
+    testMode: process.env.WHATSAPP_TEST_MODE,
+    recipients: process.env.WHATSAPP_TEST_RECIPIENTS,
     fetch: globalThis.fetch
   };
   process.env.SUPABASE_URL = 'https://supabase.test.invalid';
@@ -82,6 +96,8 @@ test('ambiguous WhatsApp timeout enters delivery_unknown and is not automaticall
   process.env.WHATSAPP_ACCESS_TOKEN = 'test-token-not-real';
   process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
   process.env.WHATSAPP_TEMPLATE_NAME = 'test_template';
+  process.env.WHATSAPP_TEST_MODE = 'true';
+  process.env.WHATSAPP_TEST_RECIPIENTS = '5515999999999';
   const requests = [];
   globalThis.fetch = async (url, options = {}) => {
     requests.push({ url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
@@ -109,9 +125,51 @@ test('ambiguous WhatsApp timeout enters delivery_unknown and is not automaticall
     const env = [
       ['SUPABASE_URL', previous.url], ['SUPABASE_SERVICE_ROLE_KEY', previous.key],
       ['WHATSAPP_ACCESS_TOKEN', previous.token], ['WHATSAPP_PHONE_NUMBER_ID', previous.phone],
-      ['WHATSAPP_TEMPLATE_NAME', previous.template]
+      ['WHATSAPP_TEMPLATE_NAME', previous.template],
+      ['WHATSAPP_TEST_MODE', previous.testMode], ['WHATSAPP_TEST_RECIPIENTS', previous.recipients]
     ];
     for (const [key, value] of env) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
+test('WhatsApp sending is blocked unless explicit test mode and recipient allowlist match', async () => {
+  const previous = {
+    token: process.env.WHATSAPP_ACCESS_TOKEN,
+    phone: process.env.WHATSAPP_PHONE_NUMBER_ID,
+    template: process.env.WHATSAPP_TEMPLATE_NAME,
+    mode: process.env.WHATSAPP_TEST_MODE,
+    recipients: process.env.WHATSAPP_TEST_RECIPIENTS,
+    fetch: globalThis.fetch
+  };
+  process.env.WHATSAPP_ACCESS_TOKEN = 'test-token-not-real';
+  process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
+  process.env.WHATSAPP_TEMPLATE_NAME = 'test_template';
+  process.env.WHATSAPP_TEST_MODE = 'true';
+  process.env.WHATSAPP_TEST_RECIPIENTS = '5515111111111';
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return fakeResponse(200, { messages: [{ id: 'wamid.TEST_ONLY' }] }); };
+  try {
+    await assert.rejects(
+      __test.sendWhatsAppTemplate({ recipient_phone: '5515999999999', payload: {} }),
+      /não consta na lista de teste/
+    );
+    assert.equal(calls, 0, 'blocked recipient must not trigger an API request');
+    process.env.WHATSAPP_TEST_MODE = 'false';
+    process.env.WHATSAPP_TEST_RECIPIENTS = '5515999999999';
+    await assert.rejects(
+      __test.sendWhatsAppTemplate({ recipient_phone: '5515999999999', payload: {} }),
+      /WHATSAPP_TEST_MODE/
+    );
+    assert.equal(calls, 0, 'disabled test mode must not trigger an API request');
+  } finally {
+    globalThis.fetch = previous.fetch;
+    for (const [key, value] of [
+      ['WHATSAPP_ACCESS_TOKEN', previous.token], ['WHATSAPP_PHONE_NUMBER_ID', previous.phone],
+      ['WHATSAPP_TEMPLATE_NAME', previous.template], ['WHATSAPP_TEST_MODE', previous.mode],
+      ['WHATSAPP_TEST_RECIPIENTS', previous.recipients]
+    ]) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
   }
