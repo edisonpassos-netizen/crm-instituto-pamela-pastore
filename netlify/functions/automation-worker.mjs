@@ -66,9 +66,9 @@ async function sendWhatsAppTemplate(job) {
   if (!token || !phoneNumberId || !templateName) {
     throw new Error('WhatsApp oficial não configurado: faltam credenciais ou modelo aprovado.');
   }
-  if (!/^\\d+$/.test(phoneNumberId)) throw new Error('WHATSAPP_PHONE_NUMBER_ID inválido.');
-  if (!/^v\\d+\\.0$/.test(apiVersion)) throw new Error('WHATSAPP_GRAPH_API_VERSION inválida.');
-  const to = String(job.recipient_phone || '').replace(/\\D/g, '');
+  if (!/^\d+$/.test(phoneNumberId)) throw new Error('WHATSAPP_PHONE_NUMBER_ID inválido.');
+  if (!/^v\d+\.0$/.test(apiVersion)) throw new Error('WHATSAPP_GRAPH_API_VERSION inválida.');
+  const to = String(job.recipient_phone || '').replace(/\D/g, '');
   if (to.length < 10 || to.length > 15) throw new Error('Telefone do destinatário inválido.');
 
   // This branch is test-only: outbound sends require an explicit test-mode
@@ -77,7 +77,7 @@ async function sendWhatsAppTemplate(job) {
     throw new Error('Envio bloqueado: WHATSAPP_TEST_MODE não está habilitado.');
   }
   const allowedRecipients = (process.env.WHATSAPP_TEST_RECIPIENTS || '')
-    .split(',').map(value => value.replace(/\\D/g, '')).filter(Boolean);
+    .split(',').map(value => value.replace(/\D/g, '')).filter(Boolean);
   if (!allowedRecipients.includes(to)) {
     throw new Error('Envio bloqueado: destinatário não consta na lista de teste.');
   }
