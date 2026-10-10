@@ -96,6 +96,7 @@ let cloudRevision=null;
 let cloudAvailable=false;
 let cloudWarning="";
 let saveQueue=Promise.resolve();
+let pendingAutomationEvents=[];
 const stages=["Novo lead","Primeiro contato","Respondeu","Qualificado","Interessado","Oferta","Agendado","Confirmado","Compareceu","Venda realizada","Pós-venda","Recuperação","Perdido"];
 const services=["Pilates","Fisioterapia particular","Fisioterapia convênio","Estética facial","Estética corporal","Depilação a laser","Acupuntura","Ozonioterapia","Avaliação","Outro"];
 const sources=["Instagram","Facebook","WhatsApp","Google","Google Ads","Meta Ads","Indicação","Orgânico","Site","Landing Page","Presencial","Outro"];
@@ -174,8 +175,13 @@ async function saveStore(){
    await saveLocalCache(snapshot);
    try{
      if(!cloudAvailable)throw new Error("Banco remoto ainda não está disponível");
-     const result=await requestCloud("PUT",{data:snapshot,revision:cloudRevision});
-     cloudRevision=result.revision;cloudWarning="";
+     const eventsToSubmit=pendingAutomationEvents.slice();
+     const result=await requestCloud("PUT",{data:snapshot,revision:cloudRevision,automationEvents:eventsToSubmit});
+     cloudRevision=result.revision;
+     const accepted=new Set(result.automation?.acceptedEventIds||[]);
+     if(accepted.size)pendingAutomationEvents=pendingAutomationEvents.filter(ev=>!accepted.has(ev.clientEventId));
+     if(result.automation?.failures?.length)console.warn("Eventos de automação aguardando nova tentativa:",result.automation.failures.length);
+     cloudWarning="";
      setDbStatus("Supabase conectado • dados na nuvem","ok");
    }catch(err){
      cloudWarning="Nuvem indisponível: alterações salvas somente neste navegador. Não feche sem exportar backup.";
@@ -296,7 +302,7 @@ function tasks(v){
 function newTask(){
  const opts=state.leads.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join("");
  modal("Novo follow-up",`<form id="taskForm" class="form"><div><label>Lead</label><select name="leadId">${opts}</select></div><div><label>Data</label><input type="date" name="date" value="${today()}"></div><div><label>Tipo</label><select name="type"><option>WhatsApp</option><option>Ligação</option><option>Retorno</option><option>Reativação</option><option>Outro</option></select></div><div class="full"><label>Observação</label><textarea name="note" rows="3"></textarea></div><div class="full"><button class="btn primary">Salvar</button></div></form>`);
- document.getElementById("taskForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);state.tasks.push({id:id(),leadId:f.get("leadId"),date:f.get("date"),type:f.get("type"),note:f.get("note"),done:false});await saveStore();closeModal();render();toast("Follow-up criado")};
+ document.getElementById("taskForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const task={id:id(),leadId:f.get("leadId"),date:f.get("date"),type:f.get("type"),note:f.get("note"),done:false};state.tasks.push(task);pendingAutomationEvents.push({clientEventId:task.id,type:"lead_follow_up_requested",sourceType:"task",sourceId:task.id,occurredAt:new Date().toISOString()});await saveStore();closeModal();render();toast("Follow-up criado")};
 }
 function toggleTask(id0){const t=state.tasks.find(x=>x.id===id0);t.done=!t.done;saveStore();render()}
 function autoTasks(){let created=0;state.leads.filter(l=>!["Venda realizada","Perdido"].includes(l.status)).forEach(l=>{if(!state.tasks.some(t=>t.leadId===l.id&&!t.done)){state.tasks.push({id:id(),leadId:l.id,date:today(),type:"Follow-up",note:"Verificar oportunidade e entrar em contato.",done:false});created++}});saveStore();toast(`${created} follow-up(s) criado(s)`);render()}
