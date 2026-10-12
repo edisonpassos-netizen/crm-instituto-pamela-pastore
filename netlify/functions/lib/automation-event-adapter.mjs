@@ -1,13 +1,9 @@
 /**
- * Converts explicit CRM domain events into a minimal queue command.
- * This adapter does not infer events from a whole-state snapshot and never
- * sends messages. Callers must pass a concrete event after a successful save.
+ * Converts only implemented CRM domain events into minimal queue commands.
+ * Events are explicit and emitted after a successful CRM save; this adapter
+ * never infers events from snapshots and never sends messages.
  */
-const ALLOWED_EVENTS = new Set([
-  'lead_follow_up_requested',
-  'appointment_completed',
-  'service_completed'
-]);
+const ALLOWED_EVENTS = new Set(['lead_follow_up_requested']);
 
 export function toAutomationCommand(event) {
   if (!event || typeof event !== 'object' || Array.isArray(event)) {
@@ -19,12 +15,10 @@ export function toAutomationCommand(event) {
   const sourceType = String(event.sourceType || '').trim();
   const sourceId = String(event.sourceId || '').trim();
   const occurredAt = new Date(event.occurredAt || '');
-  if (!sourceType || !sourceId || !Number.isFinite(occurredAt.getTime())) {
-    throw new Error('CRM event requires sourceType, sourceId and valid occurredAt.');
+  if (sourceType !== 'task' || !sourceId || !Number.isFinite(occurredAt.getTime())) {
+    throw new Error('Follow-up event requires sourceType=task, sourceId and valid occurredAt.');
   }
 
-  // Default to an internal task. External messaging is a separate, explicit
-  // consent- and eligibility-checked flow and is not enabled by this adapter.
   const dedupeKey = `crm:${event.type}:${sourceType}:${sourceId}`;
   return {
     dedupe_key: dedupeKey,
@@ -36,9 +30,7 @@ export function toAutomationCommand(event) {
       source_type: sourceType,
       source_id: sourceId,
       occurred_at: occurredAt.toISOString(),
-      task: event.type === 'lead_follow_up_requested'
-        ? 'follow_up_lead'
-        : 'confirm_service_record'
+      task: 'follow_up_lead'
     },
     channel: 'internal',
     scheduled_at: occurredAt.toISOString(),
