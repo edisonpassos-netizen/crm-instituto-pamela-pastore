@@ -7,6 +7,59 @@ function config() {
   return { base, key };
 }
 
+
+async function persistedCrmState(base, key) {
+  const response = await fetch(`${base}/rest/v1/crm_app_state?id=eq.main&select=data`, {
+    method: 'GET',
+    headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+  });
+  if (!response.ok) throw new Error(`Could not verify persisted CRM state (HTTP ${response.status}).`);
+  const rows = await response.json();
+  if (!Array.isArray(rows) || !rows[0]?.data || typeof rows[0].data !== 'object') {
+    throw new Error('Persisted CRM state is unavailable; review request not enqueued.');
+  }
+  return rows[0].data;
+}
+
+function verifiedReviewCommand(command, data) {
+  const attendanceId = command.source_id;
+  const attendance = Array.isArray(data.attendances)
+    ? data.attendances.find(item => String(item?.id || '') === attendanceId)
+    : null;
+  if (!attendance || attendance.status !== 'Concluído' || attendance.reviewConsent !== true || !attendance.consentAt) {
+    throw new Error('Attendance is not completed with recorded review consent.');
+  }
+  const lead = Array.isArray(data.leads)
+    ? data.leads.find(item => String(item?.id || '') === String(attendance.leadId || ''))
+    : null;
+  if (!lead) throw new Error('Attendance customer is missing from persisted CRM state.');
+  const phone = String(lead.phone || '').replace(/\\D/g, '');
+  if (phone.length < 10 || phone.length > 15) throw new Error('Customer phone is invalid.');
+  let reviewUrl;
+  try {
+    reviewUrl = new URL(String(data.settings?.reviewUrl || '').trim());
+  } catch {
+    throw new Error('Official Google review URL is missing or invalid.');
+  }
+  if (reviewUrl.protocol !== 'https:' || !reviewUrl.hostname) {
+    throw new Error('Official Google review URL must use HTTPS.');
+  }
+  return {
+    ...command,
+    recipient_phone: phone,
+    payload: {
+      ...command.payload,
+      attendance_id: attendanceId,
+      attendance_status: 'completed',
+      customer_opt_in: true,
+      consent_at: attendance.consentAt,
+      customer_id: String(lead.id),
+      first_name: String(lead.name || '').trim().split(/\\s+/)[0] || '',
+      google_review_url: reviewUrl.toString()
+    }
+  };
+}
+
 /**
  * Enqueues only explicit, allow-listed domain events supplied alongside a
  * successful CRM state save. Never derives events from JSON snapshots.
@@ -17,11 +70,16 @@ export async function enqueueAutomationEvents(events = []) {
   const { base, key } = config();
   const acceptedEventIds = [];
   const failures = [];
+  let crmState = null;
   for (const event of events) {
     const clientEventId = String(event?.clientEventId || '').trim();
     try {
       if (!clientEventId || clientEventId.length > 128) throw new Error('Invalid client event ID.');
-      const command = toAutomationCommand(event);
+      let command = toAutomationCommand(event);
+      if (command.event_type === 'service_completed') {
+        crmState = crmState || await persistedCrmState(base, key);
+        command = verifiedReviewCommand(command, crmState);
+      }
       const response = await fetch(`${base}/rest/v1/rpc/enqueue_crm_automation`, {
         method: 'POST',
         headers: {
