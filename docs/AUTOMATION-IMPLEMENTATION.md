@@ -50,7 +50,7 @@ Critérios de avanço: CI verde; nenhum acesso público à fila; taxa de falhas 
 - A interface mantém eventos não aceitos para novas tentativas; a chave única no banco torna o reenvio idempotente.
 - `whatsapp-status-webhook.mjs` valida o desafio GET e a assinatura HMAC SHA-256 de POST antes de atualizar o registro de tentativa associado ao ID da mensagem.
 - Testes de integração usam respostas HTTP simuladas e dados fictícios; nenhum cliente ou API da Meta recebe mensagens.
-- Nova migração proposta `202610100003_whatsapp_status.sql` adiciona status do provedor e metadados de erro. Ela ainda não foi aplicada em qualquer banco.
+- Nova migração proposta `202610120003_whatsapp_status.sql` adiciona status do provedor e metadados de erro. Ela ainda não foi aplicada em qualquer banco.
 - A confirmação real de entrega ainda não foi demonstrada. O CI valida o contrato com assinatura/chaves fictícias, não a conexão real com a Meta; qualquer verificação externa depende de autorização específica.
 
 
