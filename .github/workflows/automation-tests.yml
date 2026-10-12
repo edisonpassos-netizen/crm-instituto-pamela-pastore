@@ -52,3 +52,7 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610120002_delivery_unknown.sql
       - name: Apply proposed WhatsApp provider-status migration to ephemeral PostgreSQL
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610120003_whatsapp_status.sql
+      - name: Apply proposed privilege hardening migration to ephemeral PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610120004_harden_automation_privileges.sql
+      - name: Verify least-privilege grants and default ACLs
+        run: psql -v ON_ERROR_STOP=1 -f tests/sql/automation-privilege-hardening.sql
