@@ -70,6 +70,7 @@ test('review request is built from persisted attendance consent, phone and URL',
     assert.equal(queued.p_payload.customer_opt_in, true);
     assert.equal(queued.p_payload.google_review_url, 'https://g.page/r/official-review');
     assert.equal(queued.p_payload.first_name, 'Maria');
+    assert.deepEqual(queued.p_payload.template_parameters, ['Maria', 'https://g.page/r/official-review']);
     assert.equal(queued.p_dedupe_key, 'crm:service_completed:attendance:attendance-42');
   } finally {
     restore(previous);
