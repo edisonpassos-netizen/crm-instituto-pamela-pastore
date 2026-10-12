@@ -193,6 +193,7 @@ async function saveStore(){
 }
 async function loadStore(){
  await loadLocalCache();
+ pendingAutomationEvents=Array.isArray(state.pendingAutomationEvents)?state.pendingAutomationEvents.slice():[];
  try{
    const result=await requestCloud("GET");
    if(!result.data||typeof result.data!=="object")throw new Error("Resposta do banco sem dados válidos");
