@@ -24,15 +24,27 @@ function normalizedOrigin(value) {
   return (value || '').trim().replace(/\/$/, '');
 }
 
+function configuredOrigins() {
+  const configured = (process.env.CRM_ALLOWED_ORIGIN || '')
+    .split(',')
+    .map(normalizedOrigin)
+    .filter(Boolean);
+  return new Set([...TEST_ALLOWED_ORIGINS, ...configured]);
+}
+
+function isAllowedOrigin(origin) {
+  return configuredOrigins().has(origin);
+}
+
 function allowedOrigin(request) {
   const origin = normalizedOrigin(request.headers.get('origin'));
   let requestOrigin = '';
   try { requestOrigin = normalizedOrigin(new URL(request.url).origin); } catch {}
-  // Keep the test site and its branch URL explicitly allowlisted. Do not widen
-  // the guard to arbitrary origins if CRM_ALLOWED_ORIGIN is misconfigured.
-  if (origin) return TEST_ALLOWED_ORIGINS.has(origin);
+  // Permit only explicit test origins and origins configured by the site owner.
+  // CRM_ALLOWED_ORIGIN may contain a comma-separated allowlist when needed.
+  if (origin) return isAllowedOrigin(origin);
   // Same-origin GETs may omit Origin. Never allow an origin-less write.
-  return TEST_ALLOWED_ORIGINS.has(requestOrigin) && ['GET', 'HEAD'].includes(request.method);
+  return isAllowedOrigin(requestOrigin) && ['GET', 'HEAD'].includes(request.method);
 }
 
 function corsHeaders(request) {
@@ -44,7 +56,7 @@ function corsHeaders(request) {
     'Access-Control-Max-Age': '600',
     'Access-Control-Allow-Credentials': 'true'
   };
-  if (origin && TEST_ALLOWED_ORIGINS.has(origin)) headers['Access-Control-Allow-Origin'] = origin;
+  if (origin && isAllowedOrigin(origin)) headers['Access-Control-Allow-Origin'] = origin;
   return headers;
 }
 
@@ -76,7 +88,8 @@ function validSession(request) {
   const cookieHeader = request.headers.get('cookie') || '';
   const cookie = cookieHeader.split(';').map(v => v.trim()).find(v => v.startsWith(SESSION_COOKIE + '='));
   if (!cookie) return false;
-  const token = decodeURIComponent(cookie.slice(SESSION_COOKIE.length + 1));
+  let token;
+  try { token = decodeURIComponent(cookie.slice(SESSION_COOKIE.length + 1)); } catch { return false; }
   const parts = token.split('.');
   if (parts.length !== 2) return false;
   try {
@@ -113,7 +126,7 @@ async function supabaseRequest(method, query = '', body = null) {
   }
   if (key.startsWith('sb_publishable_')) {
     console.error('CRM Supabase configuration check: SUPABASE_SERVICE_ROLE_KEY contains a publishable key, not a server secret.');
-    const err = new Error('A chave recebida pela função do CRM é pública. No Netlify, configure a chave sb_secret_ em SUPABASE_SERVICE_ROLE_KEY com escopo Functions e contexto Production; depois publique novamente.');
+    const err = new Error('A chave recebida pela função do CRM é pública. No Netlify, configure a chave secreta de servidor em SUPABASE_SERVICE_ROLE_KEY com escopo Functions e contexto correto; depois publique novamente.');
     err.status = 500;
     throw err;
   }
@@ -129,7 +142,6 @@ async function supabaseRequest(method, query = '', body = null) {
   let parsed = null;
   try { parsed = responseText ? JSON.parse(responseText) : null; } catch {}
   if (!response.ok) {
-    // Log only Supabase's non-secret error details; never log request headers or keys.
     console.error('CRM Supabase request failed:', {
       status: response.status,
       code: parsed?.code || null,
@@ -139,7 +151,7 @@ async function supabaseRequest(method, query = '', body = null) {
       urlMatchesExpectedProject: supabaseUrl === 'https://pposribyzhxyupbxrpfo.supabase.co'
     });
     const detail = response.status === 401
-      ? 'Supabase recusou a chave configurada no servidor (HTTP 401). Confira se SUPABASE_SERVICE_ROLE_KEY é a chave secreta do mesmo projeto indicado em SUPABASE_URL.'
+      ? 'Supabase recusou a chave configurada no servidor (HTTP 401). Confira se a chave secreta pertence ao mesmo projeto indicado em SUPABASE_URL.'
       : `Supabase respondeu HTTP ${response.status}.`;
     const err = new Error(detail);
     err.status = response.status;
@@ -222,9 +234,6 @@ export default async (request) => {
       return json(409, { error: 'O CRM foi alterado em outra sessão. Atualize os dados antes de tentar novamente.' }, cors);
     }
 
-    // Queue only explicit domain events, and only after the CRM state write succeeds.
-    // Queue failures are reported separately: never tell the client the CRM save failed
-    // after the database has already committed it.
     let automation = { acceptedEventIds: [], failures: [] };
     if (payload.automationEvents !== undefined) {
       try {
