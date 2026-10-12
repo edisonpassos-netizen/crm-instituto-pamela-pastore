@@ -70,6 +70,7 @@ label{font-size:12px;font-weight:700;color:#536164;display:block;margin-bottom:5
     <button data-page="pipeline">🎯 Funil</button>
     <button data-page="tasks">📅 Follow-ups</button>
     <button data-page="sales">💰 Vendas</button>
+    <button data-page="attendances">🩺 Atendimentos</button>
     <button data-page="recovery">🔄 Recuperação</button>
     <button data-page="reports">📊 Relatórios</button>
     <button data-page="import">📥 Importar / Exportar</button>
@@ -100,7 +101,7 @@ let pendingAutomationEvents=[];
 const stages=["Novo lead","Primeiro contato","Respondeu","Qualificado","Interessado","Oferta","Agendado","Confirmado","Compareceu","Venda realizada","Pós-venda","Recuperação","Perdido"];
 const services=["Pilates","Fisioterapia particular","Fisioterapia convênio","Estética facial","Estética corporal","Depilação a laser","Acupuntura","Ozonioterapia","Avaliação","Outro"];
 const sources=["Instagram","Facebook","WhatsApp","Google","Google Ads","Meta Ads","Indicação","Orgânico","Site","Landing Page","Presencial","Outro"];
-let state={id:"state",page:"dashboard", leads:[], tasks:[], sales:[], settings:{studioName:"Studio Pâmela Pastore",primary:"#1A8690"}};
+let state={id:"state",page:"dashboard", leads:[], tasks:[], sales:[], attendances:[], settings:{studioName:"Studio Pâmela Pastore",primary:"#1A8690"}};
 let db;
 
 function id(){return crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random().toString(16).slice(2)}
@@ -162,12 +163,12 @@ document.getElementById("authForm").addEventListener("submit",async e=>{
  finally{button.disabled=false;button.textContent="Entrar no CRM"}
 });
 function normalizeState(s){
- const base={id:"state",page:"dashboard",leads:[],tasks:[],sales:[],settings:{studioName:"Studio Pâmela Pastore",primary:"#1A8690"},pendingAutomationEvents:[]};
+ const base={id:"state",page:"dashboard",leads:[],tasks:[],sales:[],attendances:[],settings:{studioName:"Studio Pâmela Pastore",primary:"#1A8690",reviewUrl:""},pendingAutomationEvents:[]};
  if(!s||typeof s!=="object"||Array.isArray(s))return base;
- return {...base,...s,id:"state",leads:Array.isArray(s.leads)?s.leads:[],tasks:Array.isArray(s.tasks)?s.tasks:[],sales:Array.isArray(s.sales)?s.sales:[],settings:{...base.settings,...(s.settings&&typeof s.settings==="object"?s.settings:{})},pendingAutomationEvents:Array.isArray(s.pendingAutomationEvents)?s.pendingAutomationEvents:[]};
+ return {...base,...s,id:"state",leads:Array.isArray(s.leads)?s.leads:[],tasks:Array.isArray(s.tasks)?s.tasks:[],sales:Array.isArray(s.sales)?s.sales:[],attendances:Array.isArray(s.attendances)?s.attendances:[],settings:{...base.settings,...(s.settings&&typeof s.settings==="object"?s.settings:{})},pendingAutomationEvents:Array.isArray(s.pendingAutomationEvents)?s.pendingAutomationEvents:[]};
 }
-function hasLocalBusinessData(s){return Boolean(s&&(s.leads?.length||s.tasks?.length||s.sales?.length));}
-function isDefaultCloudState(s){return Boolean(s&&!s.leads?.length&&!s.tasks?.length&&!s.sales?.length);}
+function hasLocalBusinessData(s){return Boolean(s&&(s.leads?.length||s.tasks?.length||s.sales?.length||s.attendances?.length));}
+function isDefaultCloudState(s){return Boolean(s&&!s.leads?.length&&!s.tasks?.length&&!s.sales?.length&&!s.attendances?.length);}
 async function saveStore(){
  state.id="state";
  state.pendingAutomationEvents=pendingAutomationEvents.slice();
@@ -235,7 +236,7 @@ function score(l){let s=0;if(l.status==="Respondeu")s+=10;if(l.interest)s+=10;if
 function leadStatusClass(s){return s==="Venda realizada"?"b-success":s==="Perdido"?"b-danger":""}
 
 function render(){
- document.getElementById("title").textContent={dashboard:"Dashboard",leads:"Leads",pipeline:"Funil de Vendas",tasks:"Follow-ups",sales:"Vendas",recovery:"Recuperação",reports:"Relatórios","import":"Importar / Exportar",backup:"Backup",settings:"Configurações"}[state.page]||"CRM";
+ document.getElementById("title").textContent={dashboard:"Dashboard",leads:"Leads",pipeline:"Funil de Vendas",tasks:"Follow-ups",sales:"Vendas",attendances:"Atendimentos",recovery:"Recuperação",reports:"Relatórios","import":"Importar / Exportar",backup:"Backup",settings:"Configurações"}[state.page]||"CRM";
  document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("active",b.dataset.page===state.page));
  const v=document.getElementById("view");
  if(state.page==="dashboard")dashboard(v);
@@ -243,6 +244,7 @@ function render(){
  else if(state.page==="pipeline")pipeline(v);
  else if(state.page==="tasks")tasks(v);
  else if(state.page==="sales")sales(v);
+ else if(state.page==="attendances")attendances(v);
  else if(state.page==="recovery")recovery(v);
  else if(state.page==="reports")reports(v);
  else if(state.page==="import")importPage(v);
@@ -324,8 +326,47 @@ function sales(v){
 }
 function newSale(){
  modal("Registrar venda",`<form id="saleForm" class="form"><div><label>Lead/Cliente</label><select name="leadId">${state.leads.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join("")}</select></div><div><label>Serviço</label><select name="service">${services.map(s=>`<option>${s}</option>`).join("")}</select></div><div><label>Valor</label><input type="number" step="0.01" name="value" required></div><div><label>Pagamento</label><select name="payment"><option>Pix</option><option>Dinheiro</option><option>Cartão crédito</option><option>Cartão débito</option><option>Outro</option></select></div><div><label>Data</label><input type="date" name="date" value="${today()}"></div><div><label>Responsável</label><input name="owner"></div><div class="full"><button class="btn primary">Registrar venda</button></div></form>`);
- document.getElementById("saleForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target),lead=state.leads.find(l=>l.id===f.get("leadId"));if(lead){lead.bought=true;lead.attended=true;lead.status="Venda realizada"}state.sales.unshift({id:id(),leadId:f.get("leadId"),service:f.get("service"),value:Number(f.get("value")),payment:f.get("payment"),date:f.get("date"),owner:f.get("owner")});await saveStore();closeModal();render();toast("Venda registrada")};
+ document.getElementById("saleForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target),lead=state.leads.find(l=>l.id===f.get("leadId"));if(lead){lead.bought=true;lead.status="Venda realizada"}state.sales.unshift({id:id(),leadId:f.get("leadId"),service:f.get("service"),value:Number(f.get("value")),payment:f.get("payment"),date:f.get("date"),owner:f.get("owner")});await saveStore();closeModal();render();toast("Venda registrada")};
 }
+
+
+function attendanceReviewEligible(a,lead){
+ const reviewUrl=String(state.settings.reviewUrl||"").trim();
+ let secureReviewUrl=false;
+ try{const u=new URL(reviewUrl);secureReviewUrl=u.protocol==="https:"&&Boolean(u.hostname)}catch{}
+ return Boolean(a&&a.status==="Concluído"&&a.reviewConsent===true&&lead&&String(lead.phone||"").replace(/\\D/g,"").length>=10&&secureReviewUrl);
+}
+function attendances(v){
+ const arr=[...state.attendances].sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+ const eligible=arr.filter(a=>attendanceReviewEligible(a,state.leads.find(l=>l.id===a.leadId))).length;
+ v.innerHTML=`<div class="toolbar"><button class="btn primary" onclick="newAttendance()">➕ Registrar atendimento</button><span class="muted">A conclusão é registrada separadamente de venda e de etapa do lead.</span></div>
+ <div class="grid cards" style="margin-top:14px">${card("Atendimentos registrados",arr.length)}${card("Concluídos",arr.filter(a=>a.status==="Concluído").length)}${card("Elegíveis para pedir avaliação",eligible)}${card("Sem consentimento",arr.filter(a=>a.status==="Concluído"&&!a.reviewConsent).length)}</div>
+ <div class="section"><div class="table-wrap"><table><thead><tr><th>Data</th><th>Cliente</th><th>Serviço</th><th>Status</th><th>Consentimento avaliação</th><th>Elegibilidade</th><th>Ações</th></tr></thead><tbody>${arr.map(a=>{const l=state.leads.find(x=>x.id===a.leadId);const ok=attendanceReviewEligible(a,l);return `<tr><td>${esc(a.date||"-")}</td><td>${esc(l?.name||a.clientName||"Cliente removido")}</td><td>${esc(a.service||"-")}</td><td><span class="badge ${a.status==="Concluído"?"b-success":a.status==="Faltou"?"b-danger":""}">${esc(a.status||"—")}</span></td><td>${a.reviewConsent?'<span class="badge b-success">Sim</span>':'Não'}</td><td>${ok?'<span class="badge b-success">Elegível</span>':'<span class="badge">Não elegível</span>'}</td><td><div class="actions"><button class="btn small" onclick="editAttendance('${a.id}')">Abrir</button><button class="btn small danger" onclick="deleteAttendance('${a.id}')">Excluir</button></div></td></tr>`}).join("")||'<tr><td colspan="7"><div class="empty">Nenhum atendimento registrado.</div></td></tr>'}</tbody></table></div><p class="muted">Elegibilidade não significa envio. Pedidos automáticos de avaliação continuam desativados até a integração e os testes de entrega serem aprovados.</p></div>`;
+}
+function newAttendance(){editAttendance(null)}
+function editAttendance(id0){
+ const a=id0?state.attendances.find(x=>x.id===id0):{id:id(),leadId:state.leads[0]?.id||"",service:"Pilates",date:today(),status:"Concluído",notes:"",reviewConsent:false,consentAt:""};
+ const leadOptions=state.leads.map(l=>`<option value="${esc(l.id)}" ${l.id===a.leadId?"selected":""}>${esc(l.name)} • ${esc(l.phone||"sem telefone")}</option>`).join("");
+ modal(id0?"Editar atendimento":"Registrar atendimento",`<form id="attendanceForm" class="form">
+ <div class="full"><label>Cliente / lead *</label><select name="leadId" required>${leadOptions}</select></div>
+ <div><label>Serviço *</label><select name="service" required>${services.map(s=>`<option ${s===a.service?"selected":""}>${esc(s)}</option>`).join("")}</select></div>
+ <div><label>Data do atendimento *</label><input type="date" name="date" max="${today()}" required value="${esc(a.date||today())}"></div>
+ <div><label>Status *</label><select name="status"><option ${a.status==="Concluído"?"selected":""}>Concluído</option><option ${a.status==="Agendado"?"selected":""}>Agendado</option><option ${a.status==="Cancelado"?"selected":""}>Cancelado</option><option ${a.status==="Faltou"?"selected":""}>Faltou</option></select></div>
+ <div class="full"><label>Observações operacionais</label><textarea name="notes" rows="2">${esc(a.notes||"")}</textarea></div>
+ <div class="full"><label><input style="width:auto" type="checkbox" name="reviewConsent" ${a.reviewConsent?"checked":""}> Cliente autorizou receber pedido de avaliação após o atendimento</label><small class="muted">Marque somente se o consentimento foi realmente obtido. Não marque por padrão.</small></div>
+ <div class="full"><button class="btn primary" type="submit">Salvar atendimento</button></div></form>`);
+ document.getElementById("attendanceForm").onsubmit=async e=>{
+  e.preventDefault();const f=new FormData(e.target),lead=state.leads.find(l=>l.id===f.get("leadId"));
+  if(!lead){toast("Cadastre ou importe o cliente antes de registrar o atendimento.");return}
+  const status=f.get("status"),consent=f.get("reviewConsent")==="on";
+  const record={...a,leadId:lead.id,clientName:lead.name,service:f.get("service"),date:f.get("date"),status,notes:f.get("notes").trim(),reviewConsent:consent,consentAt:consent?(a.consentAt||new Date().toISOString()):""};
+  if(record.date>today()){toast("A data do atendimento não pode estar no futuro.");return}
+  if(id0)state.attendances=state.attendances.map(x=>x.id===a.id?record:x);else state.attendances.unshift(record);
+  if(status==="Concluído"){lead.attended=true;if(lead.status==="Agendado"||lead.status==="Confirmado")lead.status="Compareceu"}
+  await saveStore();closeModal();render();toast("Atendimento salvo; nenhum pedido foi enviado.");
+ };
+}
+function deleteAttendance(id0){if(confirm("Excluir este registro de atendimento? Esta ação não envia mensagens.")){state.attendances=state.attendances.filter(a=>a.id!==id0);saveStore();render()}}
 
 function recovery(v){
  const arr=state.leads.filter(l=>["Perdido","Recuperação"].includes(l.status)||(!l.bought&&l.createdAt&&Date.now()-new Date(l.createdAt).getTime()>7*86400000));
@@ -462,12 +503,12 @@ function downloadBlob(blob,name){const a=document.createElement("a");a.href=URL.
 function backupPage(v){v.innerHTML=`<div class="section"><h2>💾 Backup e restauração</h2><p class="muted">O backup contém leads, follow-ups, vendas e configurações. O arquivo é salvo no seu computador; ele não substitui o backup do banco remoto.</p><div class="toolbar"><button class="btn primary" onclick="backup()">Fazer backup</button><input id="backupFile" type="file" accept=".json"><button class="btn" onclick="restore()">Restaurar backup</button></div><p class="muted" style="margin-top:14px">Recomendação: faça backup antes de grandes importações.</p></div>`}
 function backup(){const blob=new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),state},null,2)],{type:"application/json"});downloadBlob(blob,"Studio_Pamela_CRM_Backup_"+today()+".json");toast("Backup criado")}
 async function restore(){const f=document.getElementById("backupFile").files[0];if(!f)return toast("Selecione um backup");if(!confirm("Restaurar substituirá os dados atuais. Continuar?"))return;try{const x=JSON.parse(await f.text());if(!x.state||!Array.isArray(x.state.leads))throw new Error("Backup inválido");state=x.state;await saveStore();toast("Backup restaurado");render()}catch(e){toast("Backup inválido")}}
-function settings(v){v.innerHTML=`<div class="section"><h2>⚙️ Configurações</h2><form id="settingsForm" class="form"><div><label>Nome do Studio</label><input name="studioName" value="${esc(state.settings.studioName)}"></div><div><label>Cor principal</label><input name="primary" value="${esc(state.settings.primary)}"></div><div><label>Mensagem de primeiro contato</label><input name="firstMsg" value="${esc(state.settings.firstMsg||"Olá! Vi que você entrou em contato com o Studio Pâmela Pastore. Como posso te ajudar?")}"></div><div class="full"><button class="btn primary">Salvar configurações</button></div></form></div>
- <div class="section"><h2>🧪 Diagnóstico</h2><p class="muted">Banco: ${cloudAvailable?"Supabase/PostgreSQL":"cache local (nuvem indisponível)"} • Registros: ${state.leads.length} leads, ${state.tasks.length} follow-ups, ${state.sales.length} vendas.</p><button class="btn" onclick="demoData()">Carregar dados de demonstração</button><button class="btn danger" onclick="clearData()">Apagar todos os dados</button></div>`;
- document.getElementById("settingsForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);state.settings.studioName=f.get("studioName");state.settings.primary=f.get("primary");state.settings.firstMsg=f.get("firstMsg");document.documentElement.style.setProperty("--primary",state.settings.primary);await saveStore();toast("Configurações salvas");render()};
+function settings(v){v.innerHTML=`<div class="section"><h2>⚙️ Configurações</h2><form id="settingsForm" class="form"><div><label>Nome do Studio</label><input name="studioName" value="${esc(state.settings.studioName)}"></div><div><label>Cor principal</label><input name="primary" value="${esc(state.settings.primary)}"></div><div><label>Mensagem de primeiro contato</label><input name="firstMsg" value="${esc(state.settings.firstMsg||"Olá! Vi que você entrou em contato com o Studio Pâmela Pastore. Como posso te ajudar?")}"></div><div class="full"><label>Link oficial para avaliação no Google (HTTPS)</label><input name="reviewUrl" type="url" placeholder="https://g.page/r/..." value="${esc(state.settings.reviewUrl||"")}"><small class="muted">O CRM apenas valida a elegibilidade; nenhum pedido de avaliação será enviado automaticamente nesta etapa.</small></div><div class="full"><button class="btn primary">Salvar configurações</button></div></form></div>
+ <div class="section"><h2>🧪 Diagnóstico</h2><p class="muted">Banco: ${cloudAvailable?"Supabase/PostgreSQL":"cache local (nuvem indisponível)"} • Registros: ${state.leads.length} leads, ${state.tasks.length} follow-ups, ${state.sales.length} vendas, ${state.attendances.length} atendimentos.</p><button class="btn" onclick="demoData()">Carregar dados de demonstração</button><button class="btn danger" onclick="clearData()">Apagar todos os dados</button></div>`;
+ document.getElementById("settingsForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);state.settings.studioName=f.get("studioName");state.settings.primary=f.get("primary");state.settings.firstMsg=f.get("firstMsg");state.settings.reviewUrl=String(f.get("reviewUrl")||"").trim();document.documentElement.style.setProperty("--primary",state.settings.primary);await saveStore();toast("Configurações salvas");render()};
 }
 function demoData(){if(state.leads.length&& !confirm("Adicionar dados de demonstração aos dados existentes?"))return;["Ana Souza","Mariana Oliveira","Juliana Costa","Carla Mendes","Fernanda Lima","Renata Alves","Patricia Santos","Camila Rocha","Luciana Dias","Beatriz Martins"].forEach((n,i)=>state.leads.push({id:id(),name:n,phone:"1599"+String(620000+i).slice(-6),email:"",service:services[i%services.length],source:sources[i%sources.length],campaign:"Campanha demonstração",status:stages[i%stages.length],temperature:["Frio","Morno","Quente"][i%3],createdAt:new Date(Date.now()-i*86400000).toISOString(),interest:i>1,priceAsked:i>2,requestedTime:i>3,appointment:i>4,attended:i>5,bought:i>7,notes:""}));saveStore();toast("Dados de demonstração carregados");render()}
-function clearData(){if(confirm("ATENÇÃO: apagar todos os dados locais? Faça backup antes.")){state={id:"state",page:"dashboard",leads:[],tasks:[],sales:[],settings:{studioName:"Studio Pâmela Pastore",primary:"#1A8690"}};saveStore();render()}}
+function clearData(){if(confirm("ATENÇÃO: apagar todos os dados locais? Faça backup antes.")){state={id:"state",page:"dashboard",leads:[],tasks:[],sales:[],attendances:[],settings:{studioName:"Studio Pâmela Pastore",primary:"#1A8690",reviewUrl:""}};saveStore();render()}}
 document.getElementById("logo").src="data:image/jpeg;base64,"+LOGO_B64;
 document.getElementById("nav").addEventListener("click",e=>{const b=e.target.closest("button[data-page]");if(b)setPage(b.dataset.page)});
 (async()=>{try{if(await checkCRMAuth())await startCRM();else showLogin()}catch(e){showLogin("Servidor de autenticação indisponível. Confira o deploy e as variáveis do Netlify.")}})();
