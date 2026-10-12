@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { enqueueAutomationEvents } from './lib/automation-enqueue.mjs';
 
-const DEFAULT_ORIGIN = 'https://peppy-salamander-2d8776.netlify.app';
+const DEFAULT_ORIGIN = 'https://crm-automacao-teste.netlify.app';
 const SESSION_COOKIE = 'crm_session';
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
 
