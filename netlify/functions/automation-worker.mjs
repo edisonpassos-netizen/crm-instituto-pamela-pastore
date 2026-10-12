@@ -65,8 +65,8 @@ async function verifyReviewAgainstStoredState(job) {
   const lead = Array.isArray(data?.leads)
     ? data.leads.find(item => String(item?.id || '') === String(attendance.leadId || ''))
     : null;
-  const currentPhone = String(lead?.phone || '').replace(/\\D/g, '');
-  const queuedPhone = String(job?.recipient_phone || '').replace(/\\D/g, '');
+  const currentPhone = String(lead?.phone || '').replace(/\D/g, '');
+  const queuedPhone = String(job?.recipient_phone || '').replace(/\D/g, '');
   if (!lead || !currentPhone || currentPhone !== queuedPhone) {
     return { ok: false, reason: 'Telefone do cliente não corresponde ao estado atual do CRM.' };
   }
