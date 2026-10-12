@@ -363,7 +363,8 @@ function editAttendance(id0){
   if(record.date>today()){toast("A data do atendimento não pode estar no futuro.");return}
   if(id0)state.attendances=state.attendances.map(x=>x.id===a.id?record:x);else state.attendances.unshift(record);
   if(status==="Concluído"){lead.attended=true;if(lead.status==="Agendado"||lead.status==="Confirmado")lead.status="Compareceu"}
-  await saveStore();closeModal();render();toast("Atendimento salvo; nenhum pedido foi enviado.");
+  if(status==="Concluído"&&consent){pendingAutomationEvents.push({clientEventId:"review:"+record.id,type:"service_completed",sourceType:"attendance",sourceId:record.id,occurredAt:new Date().toISOString()})}
+  await saveStore();closeModal();render();toast("Atendimento salvo; elegibilidade validada pelo servidor antes de qualquer pedido.");
  };
 }
 function deleteAttendance(id0){if(confirm("Excluir este registro de atendimento? Esta ação não envia mensagens.")){state.attendances=state.attendances.filter(a=>a.id!==id0);saveStore();render()}}
