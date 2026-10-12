@@ -162,24 +162,31 @@ document.getElementById("authForm").addEventListener("submit",async e=>{
  finally{button.disabled=false;button.textContent="Entrar no CRM"}
 });
 function normalizeState(s){
- const base={id:"state",page:"dashboard",leads:[],tasks:[],sales:[],settings:{studioName:"Studio Pâmela Pastore",primary:"#1A8690"}};
+ const base={id:"state",page:"dashboard",leads:[],tasks:[],sales:[],settings:{studioName:"Studio Pâmela Pastore",primary:"#1A8690"},pendingAutomationEvents:[]};
  if(!s||typeof s!=="object"||Array.isArray(s))return base;
- return {...base,...s,id:"state",leads:Array.isArray(s.leads)?s.leads:[],tasks:Array.isArray(s.tasks)?s.tasks:[],sales:Array.isArray(s.sales)?s.sales:[],settings:{...base.settings,...(s.settings&&typeof s.settings==="object"?s.settings:{})}};
+ return {...base,...s,id:"state",leads:Array.isArray(s.leads)?s.leads:[],tasks:Array.isArray(s.tasks)?s.tasks:[],sales:Array.isArray(s.sales)?s.sales:[],settings:{...base.settings,...(s.settings&&typeof s.settings==="object"?s.settings:{})},pendingAutomationEvents:Array.isArray(s.pendingAutomationEvents)?s.pendingAutomationEvents:[]};
 }
 function hasLocalBusinessData(s){return Boolean(s&&(s.leads?.length||s.tasks?.length||s.sales?.length));}
 function isDefaultCloudState(s){return Boolean(s&&!s.leads?.length&&!s.tasks?.length&&!s.sales?.length);}
 async function saveStore(){
  state.id="state";
- const snapshot=JSON.parse(JSON.stringify(state));
+ state.pendingAutomationEvents=pendingAutomationEvents.slice();
+ const localSnapshot=JSON.parse(JSON.stringify(state));
+ const cloudSnapshot=JSON.parse(JSON.stringify(state));
+ delete cloudSnapshot.pendingAutomationEvents;
  saveQueue=saveQueue.catch(()=>{}).then(async()=>{
-   await saveLocalCache(snapshot);
+   await saveLocalCache(localSnapshot);
    try{
      if(!cloudAvailable)throw new Error("Banco remoto ainda não está disponível");
      const eventsToSubmit=pendingAutomationEvents.slice();
-     const result=await requestCloud("PUT",{data:snapshot,revision:cloudRevision,automationEvents:eventsToSubmit});
+     const result=await requestCloud("PUT",{data:cloudSnapshot,revision:cloudRevision,automationEvents:eventsToSubmit});
      cloudRevision=result.revision;
      const accepted=new Set(result.automation?.acceptedEventIds||[]);
-     if(accepted.size)pendingAutomationEvents=pendingAutomationEvents.filter(ev=>!accepted.has(ev.clientEventId));
+     if(accepted.size){
+       pendingAutomationEvents=pendingAutomationEvents.filter(ev=>!accepted.has(ev.clientEventId));
+       state.pendingAutomationEvents=pendingAutomationEvents.slice();
+       await saveLocalCache({...state,pendingAutomationEvents:pendingAutomationEvents.slice()});
+     }
      if(result.automation?.failures?.length)console.warn("Eventos de automação aguardando nova tentativa:",result.automation.failures.length);
      cloudWarning="";
      setDbStatus("Supabase conectado • dados na nuvem","ok");
@@ -199,13 +206,17 @@ async function loadStore(){
    if(!result.data||typeof result.data!=="object")throw new Error("Resposta do banco sem dados válidos");
    cloudRevision=result.revision;cloudAvailable=true;cloudWarning="";
    const cloudState=normalizeState(result.data);
+   const localPending=Array.isArray(state.pendingAutomationEvents)?state.pendingAutomationEvents:[];
+   pendingAutomationEvents=localPending.slice();
    if(isDefaultCloudState(cloudState)&&hasLocalBusinessData(state)){
      // Migração inicial automática somente quando a nuvem ainda está vazia.
      const localState=JSON.parse(JSON.stringify(state));
+     delete localState.pendingAutomationEvents;
      const saved=await requestCloud("PUT",{data:localState,revision:cloudRevision});
-     cloudRevision=saved.revision;state=localState;
+     cloudRevision=saved.revision;state=normalizeState(localState);
    }else state=cloudState;
    state=normalizeState(state);
+   state.pendingAutomationEvents=pendingAutomationEvents.slice();
    await saveLocalCache(state);
    setDbStatus("Supabase conectado • dados na nuvem","ok");
  }catch(err){
