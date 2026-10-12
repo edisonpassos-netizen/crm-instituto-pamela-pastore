@@ -2,7 +2,7 @@
 
 Branch isolada: `feature/automation-engine`.
 
-Nenhuma migração foi aplicada ao Supabase de produção. O worker deve permanecer desativado até aprovação explícita e testes em banco isolado.
+Nenhuma migração foi aplicada ao Supabase de produção. O worker deve permanecer desativado até aprovação explícita e testes simulados com mocks e fixtures sintéticas.
 
 ## Etapas
 1. Criar fila persistente com chave de deduplicação e log por tentativa.
@@ -11,7 +11,7 @@ Nenhuma migração foi aplicada ao Supabase de produção. O worker deve permane
 4. O CRM agora envia eventos internos explícitos de criação de follow-up após confirmar o salvamento; eventos nunca são inferidos de snapshots completos.
 5. Integrar WhatsApp Business Platform oficial com modelo aprovado e webhook de status.
 6. Enviar convite de avaliação somente após atendimento concluído, com consentimento, telefone e link HTTPS validado.
-7. Testar isoladamente antes de qualquer ativação.
+7. Validar primeiro com testes automatizados, fixtures sintéticas e mocks locais; não ativar integrações externas nesta etapa.
 
 ## Regras de segurança
 - Não conceder permissões a `anon` ou `authenticated`.
@@ -24,7 +24,7 @@ Nenhuma migração foi aplicada ao Supabase de produção. O worker deve permane
 ## Limitações que precisam ser resolvidas antes da produção
 - O adaptador aceita `lead_follow_up_requested` (`sourceType=task`) e `service_completed` (`sourceType=attendance`). Para `service_completed`, o servidor ignora dados de contato enviados pelo navegador e consulta `crm_app_state` para confirmar atendimento concluído, consentimento registrado, telefone válido e URL HTTPS antes de enfileirar. A chave única por atendimento evita duplicação. O worker repete a validação no estado persistido imediatamente antes do envio e cancela a tarefa se consentimento, telefone, status ou URL tiverem mudado. `appointment_completed` continua rejeitado.
 - Validar o modelo WhatsApp aprovado e seus parâmetros.
-- Testar a API real somente com credenciais do app Meta e número de teste, em ambiente isolado que use projeto Supabase de teste. Não reutilizar variáveis de produção no deploy de teste.
+- Nesta etapa, testar a integração Meta somente por mocks e simulações. Não utilizar `crm-automacao-teste`, não criar projeto substituto e não executar chamadas reais sem autorização específica.
 - O primeiro envio real de validação será uma mensagem de teste ao número controlado pelo operador, não a clientes. A resposta HTTP da Meta indica aceitação; a confirmação de entrega deve chegar ao webhook.
 - Nunca colar tokens, App Secret, verify token ou service-role key no chat, issues, commits ou logs.
 - Implementar webhook autenticado de status da Meta para confirmar sent/delivered/read/failed; até lá, aceite da API não significa entrega.
@@ -32,9 +32,9 @@ Nenhuma migração foi aplicada ao Supabase de produção. O worker deve permane
 - Validar o link oficial de avaliação Google.
 
 ## Plano de ativação proposto (não autorizado ainda)
-1. **Fase A — interno:** executar apenas tarefas internas em ambiente de teste por pelo menos 3 dias úteis; comparar fila, logs e CRM.
-2. **Fase B — sandbox de integração:** testar API mockada e, quando disponível, número de teste Meta; sem clientes reais.
-3. **Fase C — piloto controlado:** somente após aprovação explícita, usar modelo aprovado, consentimento comprovado, pequeno grupo interno de teste e webhook de status funcional.
+1. **Fase A — interno:** executar tarefas internas somente com mocks, fixtures sintéticas e testes automatizados; comparar fila simulada, logs e estado esperado.
+2. **Fase B — integração simulada:** testar contratos de API com mocks; sem chamadas externas ou mensagens reais.
+3. **Fase C — piloto controlado:** somente após autorização expressa separada, revisar arquitetura, número, modelo aprovado, consentimento, webhook de status e controles de pausa antes de qualquer envio.
 4. **Fase D — expansão:** ampliar gradualmente com limites diários, alertas de falha, deduplicação e procedimento de pausa.
 
 Critérios de avanço: CI verde; nenhum acesso público à fila; taxa de falhas explicada; entrega reconciliada via webhook; duplicatas e timeouts tratados; rollback documentado.
@@ -55,20 +55,14 @@ Critérios de avanço: CI verde; nenhum acesso público à fila; taxa de falhas 
 - A confirmação real de entrega exige configuração da URL do webhook e segredo da Meta apenas em ambiente de teste; os testes do CI validam o contrato com assinatura/chaves fictícias, não a conexão real com a Meta.
 
 
-## Pré-requisitos para o teste real da Meta (ainda não executado)
+## Pré-requisitos para qualquer futura validação externa da Meta (não autorizada nesta etapa)
 
-1. Criar/selecionar o app Meta de teste e o número de telefone de teste fornecido no painel WhatsApp > API Setup.
-2. Adicionar somente o telefone de teste controlado pelo operador à lista de destinatários permitidos pelo painel.
-3. Configurar um ambiente isolado de deploy e um projeto Supabase de teste. Não copiar dados do CRM nem apontar para o projeto de produção.
-4. Configurar segredos no ambiente isolado, nunca no código: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`; e `WHATSAPP_TEST_MODE=true`, `WHATSAPP_TEST_RECIPIENTS=<número de teste>`.
-5. Usar um modelo que o painel identifique como aprovado. O template `hello_world` é somente um valor inicial possível; confirmar nome e idioma que aparecem no painel antes do teste.
-6. Publicar o webhook isolado em HTTPS, configurar o callback e verificar a assinatura. Assinar o campo de webhook de mensagens/status da WABA de teste.
-7. Fazer uma única execução supervisionada para o número de teste, confirmar ID `wamid` da resposta e depois o webhook `sent` / `delivered` / `read` ou `failed`. Se houver timeout ambíguo, não repetir automaticamente.
-8. Desativar `WHATSAPP_TEST_MODE` e `AUTOMATIONS_ENABLED` após o teste; salvar apenas resultado técnico sem token ou número completo em logs.
+Nenhuma chamada real à API da Meta deve ser executada durante esta fase. Usar mocks e testes automatizados com credenciais fictícias.
 
-**Bloqueio atual:** nenhum acesso autorizado à conta Meta nem credenciais de teste foram disponibilizados a esta sessão. Portanto, não foi feita chamada real à API nem alterada qualquer configuração de Meta/Netlify/Supabase. A configuração real permanece pendente desses acessos.
+Antes de uma futura validação externa, exigir autorização expressa para o escopo exato, confirmar que o número pertence ao operador e que o modelo está aprovado, validar webhook e assinatura, e documentar o procedimento de pausa e reconciliação. Não usar `crm-automacao-teste`, não criar projeto substituto, não transferir segredos ou dados entre projetos e não configurar variáveis de produção para testes.
 
-
+**Bloqueio atual:** a conexão real com a Meta não foi comprovada nesta auditoria. Não foram enviados mensagens nem alteradas configurações de Meta, Netlify ou Supabase.
+ 
 ## Escopo funcional confirmado após auditoria do CRM
 
 - O modelo de estado atualmente usado pela interface contém `leads`, `tasks` e `sales`. O CRM não expõe ainda uma coleção estruturada de agendamentos/atendimentos concluídos que permita reconciliar, com segurança, os eventos `appointment_completed` e `service_completed`.
