@@ -22,7 +22,7 @@ Nenhuma migração foi aplicada ao Supabase de produção. O worker deve permane
 - Confirmar suporte e limites de Scheduled Functions no plano Netlify.
 
 ## Limitações que precisam ser resolvidas antes da produção
-- Conectar eventos reais do CRM à fila.
+- O único evento de domínio atualmente suportado pelo adaptador é `lead_follow_up_requested` para uma tarefa (`sourceType=task`). Os eventos `appointment_completed` e `service_completed` são rejeitados até existirem registros reais e critérios de conclusão verificáveis no CRM.
 - Validar o modelo WhatsApp aprovado e seus parâmetros.
 - Testar a API real somente com credenciais do app Meta e número de teste, em ambiente isolado que use projeto Supabase de teste. Não reutilizar variáveis de produção no deploy de teste.
 - O primeiro envio real de validação será uma mensagem de teste ao número controlado pelo operador, não a clientes. A resposta HTTP da Meta indica aceitação; a confirmação de entrega deve chegar ao webhook.
@@ -64,3 +64,12 @@ Critérios de avanço: CI verde; nenhum acesso público à fila; taxa de falhas 
 8. Desativar `WHATSAPP_TEST_MODE` e `AUTOMATIONS_ENABLED` após o teste; salvar apenas resultado técnico sem token ou número completo em logs.
 
 **Bloqueio atual:** nenhum acesso autorizado à conta Meta nem credenciais de teste foram disponibilizados a esta sessão. Portanto, não foi feita chamada real à API nem alterada qualquer configuração de Meta/Netlify/Supabase. A configuração real permanece pendente desses acessos.
+
+
+## Escopo funcional confirmado após auditoria do CRM
+
+- O modelo de estado atualmente usado pela interface contém `leads`, `tasks` e `sales`. O CRM não expõe ainda uma coleção estruturada de agendamentos/atendimentos concluídos que permita reconciliar, com segurança, os eventos `appointment_completed` e `service_completed`.
+- Por isso, o adaptador agora aceita somente `lead_follow_up_requested` com `sourceType=task`. Tentativas de enfileirar eventos de agendamento ou serviço concluído são rejeitadas antes de qualquer chamada à fila.
+- O worker confirma um follow-up somente depois de encontrar o ID da tarefa no estado persistido; se não encontrar, envia para `dead_letter` para análise, sem criar tarefas duplicadas.
+- O evento de follow-up é interno e não envia mensagens. O worker e os envios externos permanecem desativados até validação separada.
+- Próximo trabalho funcional: modelar no CRM um registro explícito de atendimento concluído (identificador estável, cliente/lead, serviço, data/hora, status e evidência de consentimento para contato). Somente depois disso deve ser conectado o pedido de avaliação, com URL oficial validada, telefone válido e webhook de status da Meta.
