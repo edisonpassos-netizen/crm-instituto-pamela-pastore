@@ -11,7 +11,7 @@ function response(status = 201, body = []) {
   };
 }
 
-test('full internal task lifecycle: failure schedules retry, next attempt completes and logs', async () => {
+test('internal task lifecycle: transient logging failure retries, then unimplemented task is dead-lettered', async () => {
   const previous = {
     url: process.env.SUPABASE_URL,
     key: process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -55,14 +55,15 @@ test('full internal task lifecycle: failure schedules retry, next attempt comple
     requests.length = 0;
     await __test.processJob({ ...job, attempts: 2 });
 
-    const successLog = requests.find(r => r.url.includes('/rest/v1/crm_automation_attempts') && r.body?.outcome === 'succeeded');
-    const completedPatch = requests.find(r => r.method === 'PATCH');
-    assert.ok(successLog, 'successful retry should create a succeeded attempt');
-    assert.ok(completedPatch, 'successful retry should update queue state');
-    assert.equal(completedPatch.body.status, 'completed');
-    assert.equal(completedPatch.body.locked_at, null);
-    assert.equal(completedPatch.body.last_error, null);
-    assert.ok(completedPatch.body.completed_at);
+    const failedLog = requests.find(r => r.url.includes('/rest/v1/crm_automation_attempts') && r.body?.outcome === 'failed');
+    const terminalPatch = requests.find(r => r.method === 'PATCH');
+    assert.ok(failedLog, 'unimplemented internal task must be logged as failed');
+    assert.match(failedLog.body.detail, /ainda não implementada/i);
+    assert.ok(terminalPatch, 'unimplemented task should update queue state');
+    assert.equal(terminalPatch.body.status, 'dead_letter');
+    assert.equal(terminalPatch.body.locked_at, null);
+    assert.match(terminalPatch.body.last_error, /nenhuma ação foi executada/i);
+    assert.equal(terminalPatch.body.completed_at, undefined);
   } finally {
     globalThis.fetch = previous.fetch;
     if (previous.url === undefined) delete process.env.SUPABASE_URL;
