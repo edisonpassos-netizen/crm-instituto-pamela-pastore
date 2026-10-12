@@ -93,9 +93,9 @@ export async function enqueueAutomationEvents(events = []) {
           p_event_type: command.event_type,
           p_source_type: command.source_type,
           p_source_id: command.source_id,
-          p_recipient_phone: null,
+          p_recipient_phone: command.recipient_phone,
           p_payload: command.payload,
-          p_channel: 'internal',
+          p_channel: command.channel,
           p_scheduled_at: command.scheduled_at,
           p_max_attempts: command.max_attempts
         })
