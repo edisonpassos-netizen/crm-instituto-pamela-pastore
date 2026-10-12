@@ -33,7 +33,7 @@ function verifiedReviewCommand(command, data) {
     ? data.leads.find(item => String(item?.id || '') === String(attendance.leadId || ''))
     : null;
   if (!lead) throw new Error('Attendance customer is missing from persisted CRM state.');
-  const phone = String(lead.phone || '').replace(/\\D/g, '');
+  const phone = String(lead.phone || '').replace(/\D/g, '');
   if (phone.length < 10 || phone.length > 15) throw new Error('Customer phone is invalid.');
   let reviewUrl;
   try {
@@ -54,7 +54,7 @@ function verifiedReviewCommand(command, data) {
       customer_opt_in: true,
       consent_at: attendance.consentAt,
       customer_id: String(lead.id),
-      first_name: String(lead.name || '').trim().split(/\\s+/)[0] || '',
+      first_name: String(lead.name || '').trim().split(/\s+/)[0] || '',
       google_review_url: reviewUrl.toString()
     }
   };
