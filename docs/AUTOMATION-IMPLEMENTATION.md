@@ -25,7 +25,6 @@ Nenhuma migração foi aplicada ao Supabase de produção. O worker deve permane
 - O adaptador aceita `lead_follow_up_requested` (`sourceType=task`) e `service_completed` (`sourceType=attendance`). Para `service_completed`, o servidor ignora dados de contato enviados pelo navegador e consulta `crm_app_state` para confirmar atendimento concluído, consentimento registrado, telefone válido e URL HTTPS antes de enfileirar. A chave única por atendimento evita duplicação. O worker repete a validação no estado persistido imediatamente antes do envio e cancela a tarefa se consentimento, telefone, status ou URL tiverem mudado. `appointment_completed` continua rejeitado.
 - Validar o modelo WhatsApp aprovado e seus parâmetros.
 - Nesta etapa, testar a integração Meta somente por mocks e simulações. Não utilizar `crm-automacao-teste`, não criar projeto substituto e não executar chamadas reais sem autorização específica.
-- O primeiro envio real de validação será uma mensagem de teste ao número controlado pelo operador, não a clientes. A resposta HTTP da Meta indica aceitação; a confirmação de entrega deve chegar ao webhook.
 - Nunca colar tokens, App Secret, verify token ou service-role key no chat, issues, commits ou logs.
 - Implementar webhook autenticado de status da Meta para confirmar sent/delivered/read/failed; até lá, aceite da API não significa entrega.
 - Respostas de rede ambíguas são marcadas `delivery_unknown` e exigem reconciliação manual antes de qualquer reenvio.
@@ -39,7 +38,7 @@ Nenhuma migração foi aplicada ao Supabase de produção. O worker deve permane
 
 Critérios de avanço: CI verde; nenhum acesso público à fila; taxa de falhas explicada; entrega reconciliada via webhook; duplicatas e timeouts tratados; rollback documentado.
 - Testar login, leads, tarefas, vendas, registros de atendimento, migração de cache antigo e persistência do CRM atual.
-- Validar no ambiente isolado um modelo WhatsApp aprovado e seus parâmetros exatos; não usar clientes reais durante esse teste. Para o evento de avaliação, o código envia dois parâmetros de corpo na ordem: primeiro nome do cliente e URL HTTPS de avaliação; o modelo aprovado precisa corresponder a essa estrutura.
+- A compatibilidade do modelo WhatsApp deve ser verificada por contrato simulado: o evento de avaliação espera dois parâmetros de corpo, primeiro nome e URL HTTPS. A confirmação com o modelo real permanece bloqueada até autorização específica.
 
 
 ## Integração de eventos e confirmação de entrega — testes da branch isolada
@@ -52,7 +51,7 @@ Critérios de avanço: CI verde; nenhum acesso público à fila; taxa de falhas 
 - `whatsapp-status-webhook.mjs` valida o desafio GET e a assinatura HMAC SHA-256 de POST antes de atualizar o registro de tentativa associado ao ID da mensagem.
 - Testes de integração usam respostas HTTP simuladas e dados fictícios; nenhum cliente ou API da Meta recebe mensagens.
 - Nova migração proposta `202610100003_whatsapp_status.sql` adiciona status do provedor e metadados de erro. Ela ainda não foi aplicada em qualquer banco.
-- A confirmação real de entrega exige configuração da URL do webhook e segredo da Meta apenas em ambiente de teste; os testes do CI validam o contrato com assinatura/chaves fictícias, não a conexão real com a Meta.
+- A confirmação real de entrega ainda não foi demonstrada. O CI valida o contrato com assinatura/chaves fictícias, não a conexão real com a Meta; qualquer verificação externa depende de autorização específica.
 
 
 ## Pré-requisitos para qualquer futura validação externa da Meta (não autorizada nesta etapa)
