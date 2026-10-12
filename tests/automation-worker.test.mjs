@@ -11,7 +11,7 @@ test('retry delay grows exponentially and is capped', () => {
 
 test('review request requires completed attendance, consent, URL and phone', () => {
   const valid = {
-    event_type: 'request_review',
+    event_type: 'service_completed',
     channel: 'google_review',
     recipient_phone: '5515999999999',
     payload: {
@@ -68,5 +68,34 @@ test('unimplemented internal task is not reported as successful', async () => {
     else process.env.SUPABASE_URL = originalUrl;
     if (originalKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     else process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
+  }
+});
+
+
+test('worker rechecks persisted consent, phone and review URL before send', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalUrl = process.env.SUPABASE_URL;
+  const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = 'https://test-project.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_test_only';
+  const data = {
+    attendances: [{ id: 'attendance-42', leadId: 'lead-7', status: 'Concluído', reviewConsent: true, consentAt: '2026-10-12T12:00:00.000Z' }],
+    leads: [{ id: 'lead-7', name: 'Maria Silva', phone: '5515999999999' }],
+    settings: { reviewUrl: 'https://g.page/r/example/review' }
+  };
+  globalThis.fetch = async () => new Response(JSON.stringify([{ data }]), { status: 200 });
+  try {
+    const job = {
+      source_id: 'attendance-42', recipient_phone: '5515999999999',
+      payload: { attendance_id: 'attendance-42', consent_at: '2026-10-12T12:00:00.000Z', google_review_url: 'https://g.page/r/example/review' }
+    };
+    assert.equal((await __test.verifyReviewAgainstStoredState(job)).ok, true);
+    assert.equal((await __test.verifyReviewAgainstStoredState({ ...job, recipient_phone: '5515888888888' })).ok, false);
+    data.attendances[0].reviewConsent = false;
+    assert.equal((await __test.verifyReviewAgainstStoredState(job)).ok, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = originalUrl;
+    if (originalKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY; else process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
   }
 });
