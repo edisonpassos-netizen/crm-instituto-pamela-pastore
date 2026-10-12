@@ -150,8 +150,15 @@ async function processJob(job) {
     }
 
     if (job.channel === 'internal') {
-      await logAttempt(job, 'succeeded', 'Tarefa interna processada.');
-      await updateJob(job, { status: 'completed', locked_at: null, completed_at: new Date().toISOString(), last_error: null });
+      // Do not report success until the CRM-side effect is implemented. The
+      // current worker has no safe revision-aware writer for crm_app_state.
+      const detail = 'Integração de tarefas internas ainda não implementada; nenhuma ação foi executada.';
+      await logAttempt(job, 'failed', detail);
+      await updateJob(job, {
+        status: 'dead_letter',
+        locked_at: null,
+        last_error: detail
+      });
       return;
     }
 
