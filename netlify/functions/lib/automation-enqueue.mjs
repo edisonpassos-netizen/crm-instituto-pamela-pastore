@@ -55,7 +55,8 @@ function verifiedReviewCommand(command, data) {
       consent_at: attendance.consentAt,
       customer_id: String(lead.id),
       first_name: String(lead.name || '').trim().split(/\s+/)[0] || '',
-      google_review_url: reviewUrl.toString()
+      google_review_url: reviewUrl.toString(),
+      template_parameters: [String(lead.name || '').trim().split(/\s+/)[0] || 'Olá', reviewUrl.toString()]
     }
   };
 }
