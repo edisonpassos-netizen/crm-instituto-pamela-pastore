@@ -39,7 +39,7 @@ Nenhuma migração foi aplicada ao Supabase de produção. O worker deve permane
 
 Critérios de avanço: CI verde; nenhum acesso público à fila; taxa de falhas explicada; entrega reconciliada via webhook; duplicatas e timeouts tratados; rollback documentado.
 - Testar login, leads, tarefas, vendas, registros de atendimento, migração de cache antigo e persistência do CRM atual.
-- Validar no ambiente isolado um modelo WhatsApp aprovado e seus parâmetros exatos; não usar clientes reais durante esse teste.
+- Validar no ambiente isolado um modelo WhatsApp aprovado e seus parâmetros exatos; não usar clientes reais durante esse teste. Para o evento de avaliação, o código envia dois parâmetros de corpo na ordem: primeiro nome do cliente e URL HTTPS de avaliação; o modelo aprovado precisa corresponder a essa estrutura.
 
 
 ## Integração de eventos e confirmação de entrega — testes da branch isolada
