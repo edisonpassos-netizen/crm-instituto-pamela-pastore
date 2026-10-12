@@ -37,27 +37,84 @@ test('explicit supported CRM follow-up is enqueued through the server RPC', asyn
   }
 });
 
-test('unsupported appointment/service events are rejected before any queue network call', async () => {
+test('review request is built from persisted attendance consent, phone and URL', async () => {
+  const previous = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY, fetch: globalThis.fetch };
+  process.env.SUPABASE_URL = 'https://supabase.test.invalid';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'fake-server-secret-for-tests';
+  const requests = [];
+  const persisted = {
+    attendances: [{ id: 'attendance-42', leadId: 'lead-7', status: 'Concluído', reviewConsent: true, consentAt: '2026-10-12T12:00:00.000Z' }],
+    leads: [{ id: 'lead-7', name: 'Maria Silva', phone: '+55 (15) 99999-9999' }],
+    settings: { reviewUrl: 'https://g.page/r/official-review' }
+  };
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
+    if (String(url).includes('/crm_app_state?')) return new Response(JSON.stringify([{ data: persisted }]), { status: 200 });
+    if (String(url).includes('/rpc/enqueue_crm_automation')) return new Response(JSON.stringify('fixture-queue-id'), { status: 200 });
+    return new Response('unexpected request', { status: 500 });
+  };
+  try {
+    const result = await enqueueAutomationEvents([{
+      clientEventId: 'review:attendance-42', type: 'service_completed',
+      sourceType: 'attendance', sourceId: 'attendance-42',
+      occurredAt: '2026-10-12T12:00:00.000Z',
+      recipient_phone: 'attacker-controlled', customer_opt_in: false,
+      google_review_url: 'https://attacker.example'
+    }]);
+    assert.deepEqual(result, { acceptedEventIds: ['review:attendance-42'], failures: [] });
+    assert.equal(requests.length, 2);
+    const queued = requests.find(call => call.url.includes('/rpc/enqueue_crm_automation')).body;
+    assert.equal(queued.p_channel, 'google_review');
+    assert.equal(queued.p_event_type, 'service_completed');
+    assert.equal(queued.p_recipient_phone, '5515999999999');
+    assert.equal(queued.p_payload.customer_opt_in, true);
+    assert.equal(queued.p_payload.google_review_url, 'https://g.page/r/official-review');
+    assert.equal(queued.p_payload.first_name, 'Maria');
+    assert.equal(queued.p_dedupe_key, 'crm:service_completed:attendance:attendance-42');
+  } finally {
+    restore(previous);
+  }
+});
+
+test('review request is rejected before queue RPC when persisted consent is absent', async () => {
+  const previous = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY, fetch: globalThis.fetch };
+  process.env.SUPABASE_URL = 'https://supabase.test.invalid';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'fake-server-secret-for-tests';
+  let queueCalls = 0;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/crm_app_state?')) return new Response(JSON.stringify([{
+      data: { attendances: [{ id: 'attendance-42', leadId: 'lead-7', status: 'Concluído', reviewConsent: false, consentAt: '' }], leads: [{ id: 'lead-7', name: 'Maria Silva', phone: '5515999999999' }], settings: { reviewUrl: 'https://g.page/r/official-review' } }
+    }]), { status: 200 });
+    if (String(url).includes('/rpc/enqueue_crm_automation')) queueCalls++;
+    return new Response('unexpected request', { status: 500 });
+  };
+  try {
+    const result = await enqueueAutomationEvents([{
+      clientEventId: 'review:attendance-42', type: 'service_completed',
+      sourceType: 'attendance', sourceId: 'attendance-42', occurredAt: '2026-10-12T12:00:00.000Z'
+    }]);
+    assert.deepEqual(result.acceptedEventIds, []);
+    assert.equal(result.failures.length, 1);
+    assert.equal(queueCalls, 0);
+  } finally {
+    restore(previous);
+  }
+});
+
+test('unsupported appointment events are rejected before any queue network call', async () => {
   const previous = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY, fetch: globalThis.fetch };
   process.env.SUPABASE_URL = 'https://supabase.test.invalid';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'fake-server-secret-for-tests';
   let calls = 0;
   globalThis.fetch = async () => { calls += 1; return new Response('unexpected', { status: 200 }); };
   try {
-    for (const type of ['appointment_completed', 'service_completed']) {
-      const result = await enqueueAutomationEvents([{
-        clientEventId: 'event-not-supported',
-        type,
-        sourceType: 'service',
-        sourceId: 'fixture-service-5',
-        occurredAt: '2026-10-10T12:00:00.000Z',
-        channel: 'whatsapp',
-        recipient_phone: '5515999999999'
-      }]);
-      assert.deepEqual(result.acceptedEventIds, []);
-      assert.equal(result.failures.length, 1);
-    }
-    assert.equal(calls, 0, 'unsupported events must never reach the queue RPC');
+    const result = await enqueueAutomationEvents([{
+      clientEventId: 'event-not-supported', type: 'appointment_completed',
+      sourceType: 'appointment', sourceId: 'appointment-5', occurredAt: '2026-10-10T12:00:00.000Z'
+    }]);
+    assert.deepEqual(result.acceptedEventIds, []);
+    assert.equal(result.failures.length, 1);
+    assert.equal(calls, 0);
   } finally {
     restore(previous);
   }
