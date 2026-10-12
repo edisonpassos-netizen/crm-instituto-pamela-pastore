@@ -150,14 +150,30 @@ async function processJob(job) {
     }
 
     if (job.channel === 'internal') {
-      // Do not report success until the CRM-side effect is implemented. The
-      // current worker has no safe revision-aware writer for crm_app_state.
-      const detail = 'Integração de tarefas internas ainda não implementada; nenhuma ação foi executada.';
-      await logAttempt(job, 'failed', detail);
+      // A follow-up is created by the CRM before its event is enqueued.
+      // Reconcile against the durable CRM snapshot instead of creating a
+      // duplicate task or mutating the whole-state document from the worker.
+      if (job.event_type !== 'lead_follow_up_requested' ||
+          job.source_type !== 'task' || !job.source_id) {
+        const detail = 'Evento interno ainda não possui um reconciliador implementado.';
+        await logAttempt(job, 'failed', detail);
+        await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
+        return;
+      }
+      const rows = await dbRequest('crm_app_state?id=eq.main&select=data', 'GET');
+      const data = Array.isArray(rows) ? rows[0]?.data : null;
+      const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+      const exists = tasks.some(task => String(task?.id || '') === String(job.source_id));
+      if (!exists) {
+        const detail = 'Follow-up não encontrado no estado persistido do CRM; verificar sincronização.';
+        await logAttempt(job, 'failed', detail);
+        await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
+        return;
+      }
+      await logAttempt(job, 'succeeded', 'Follow-up confirmado no estado persistido do CRM.');
       await updateJob(job, {
-        status: 'dead_letter',
-        locked_at: null,
-        last_error: detail
+        status: 'completed', locked_at: null,
+        completed_at: new Date().toISOString(), last_error: null
       });
       return;
     }
