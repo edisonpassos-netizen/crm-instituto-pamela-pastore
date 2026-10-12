@@ -19,13 +19,28 @@ test('CRM follow-up event becomes a deduplicated internal queue command', () => 
   assert.equal(command.max_attempts, 3);
 });
 
-test('appointment and service completion events are rejected until real CRM records are implemented', () => {
-  for (const type of ['appointment_completed', 'service_completed']) {
-    assert.throws(() => toAutomationCommand({
-      type, sourceType: 'service', sourceId: 'fixture-service-5',
-      occurredAt: '2026-10-10T12:00:00.000Z'
-    }), /Unsupported/);
-  }
+test('service completion becomes a review candidate with no client-supplied contact data', () => {
+  const command = toAutomationCommand({
+    type: 'service_completed', sourceType: 'attendance', sourceId: 'attendance-42',
+    occurredAt: '2026-10-10T12:00:00.000Z', recipient_phone: '5515999999999',
+    customer_opt_in: true, google_review_url: 'https://evil.example'
+  });
+  assert.equal(command.dedupe_key, 'crm:service_completed:attendance:attendance-42');
+  assert.equal(command.event_type, 'service_completed');
+  assert.equal(command.channel, 'google_review');
+  assert.equal(command.recipient_phone, null);
+  assert.deepEqual(command.payload, { attendance_id: 'attendance-42', occurred_at: '2026-10-10T12:00:00.000Z' });
+});
+
+test('appointment events and malformed attendance sources are rejected', () => {
+  assert.throws(() => toAutomationCommand({
+    type: 'appointment_completed', sourceType: 'appointment', sourceId: 'appointment-1',
+    occurredAt: '2026-10-10T12:00:00.000Z'
+  }), /Unsupported/);
+  assert.throws(() => toAutomationCommand({
+    type: 'service_completed', sourceType: 'service', sourceId: 'attendance-42',
+    occurredAt: '2026-10-10T12:00:00.000Z'
+  }), /sourceType=attendance/);
 });
 
 test('unsupported events and malformed follow-up sources are rejected', () => {
