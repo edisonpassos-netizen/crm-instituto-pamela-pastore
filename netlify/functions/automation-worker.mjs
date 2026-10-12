@@ -43,12 +43,42 @@ function retryDelaySeconds(attempt) {
 
 function isReviewEligible(job) {
   const p = job?.payload || {};
-  return job?.event_type === 'request_review'
+  return job?.event_type === 'service_completed'
     && p.attendance_status === 'completed'
     && p.customer_opt_in === true
     && typeof p.google_review_url === 'string'
     && /^https:\/\//i.test(p.google_review_url)
     && Boolean(job.recipient_phone);
+}
+
+
+async function verifyReviewAgainstStoredState(job) {
+  const rows = await dbRequest('crm_app_state?id=eq.main&select=data', 'GET');
+  const data = Array.isArray(rows) ? rows[0]?.data : null;
+  const attendanceId = String(job?.payload?.attendance_id || job?.source_id || '');
+  const attendance = Array.isArray(data?.attendances)
+    ? data.attendances.find(item => String(item?.id || '') === attendanceId)
+    : null;
+  if (!attendance || attendance.status !== 'Concluído' || attendance.reviewConsent !== true || !attendance.consentAt) {
+    return { ok: false, reason: 'Atendimento não está concluído ou não há consentimento registrado no CRM.' };
+  }
+  const lead = Array.isArray(data?.leads)
+    ? data.leads.find(item => String(item?.id || '') === String(attendance.leadId || ''))
+    : null;
+  const currentPhone = String(lead?.phone || '').replace(/\\D/g, '');
+  const queuedPhone = String(job?.recipient_phone || '').replace(/\\D/g, '');
+  if (!lead || !currentPhone || currentPhone !== queuedPhone) {
+    return { ok: false, reason: 'Telefone do cliente não corresponde ao estado atual do CRM.' };
+  }
+  let currentUrl;
+  try { currentUrl = new URL(String(data?.settings?.reviewUrl || '').trim()); } catch {}
+  if (!currentUrl || currentUrl.protocol !== 'https:' || currentUrl.toString() !== String(job?.payload?.google_review_url || '')) {
+    return { ok: false, reason: 'Link oficial de avaliação não corresponde à configuração atual do CRM.' };
+  }
+  if (String(attendance.consentAt) !== String(job?.payload?.consent_at || '')) {
+    return { ok: false, reason: 'Registro de consentimento mudou após o pedido entrar na fila.' };
+  }
+  return { ok: true, lead, attendance };
 }
 
 function reviewMessage(job) {
@@ -143,10 +173,18 @@ async function updateJob(job, patch) {
 
 async function processJob(job) {
   try {
-    if (job.channel === 'google_review' && !isReviewEligible(job)) {
-      await logAttempt(job, 'skipped', 'Atendimento não elegível para solicitação de avaliação.');
-      await updateJob(job, { status: 'cancelled', locked_at: null, last_error: 'Atendimento não elegível.' });
-      return;
+    if (job.channel === 'google_review') {
+      if (!isReviewEligible(job)) {
+        await logAttempt(job, 'skipped', 'Atendimento não elegível para solicitação de avaliação.');
+        await updateJob(job, { status: 'cancelled', locked_at: null, last_error: 'Atendimento não elegível.' });
+        return;
+      }
+      const verification = await verifyReviewAgainstStoredState(job);
+      if (!verification.ok) {
+        await logAttempt(job, 'skipped', verification.reason);
+        await updateJob(job, { status: 'cancelled', locked_at: null, last_error: verification.reason });
+        return;
+      }
     }
 
     if (job.channel === 'internal') {
@@ -179,7 +217,7 @@ async function processJob(job) {
     }
 
     // External sends are intentionally blocked until an operator enables the worker.
-    if (job.channel === 'google_review' && job.event_type !== 'request_review') {
+    if (job.channel === 'google_review' && job.event_type !== 'service_completed') {
       throw new Error('Canal de avaliação exige evento request_review.');
     }
     const providerMessageId = await sendWhatsAppTemplate(job);
@@ -236,4 +274,4 @@ export default async () => {
   }
 };
 
-export const __test = { retryDelaySeconds, isReviewEligible, reviewMessage, processJob, sendWhatsAppTemplate };
+export const __test = { retryDelaySeconds, isReviewEligible, reviewMessage, verifyReviewAgainstStoredState, processJob, sendWhatsAppTemplate };
