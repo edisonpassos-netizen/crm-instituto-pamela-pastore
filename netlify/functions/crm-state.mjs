@@ -15,23 +15,28 @@ const json = (statusCode, body, extraHeaders = {}) => new Response(JSON.stringif
   headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extraHeaders }
 });
 
-function expectedOrigin() {
-  return (process.env.CRM_ALLOWED_ORIGIN || DEFAULT_ORIGIN).trim().replace(/\/$/, '');
+const TEST_ALLOWED_ORIGINS = new Set([
+  DEFAULT_ORIGIN,
+  'https://feature-automation-engine--crm-automacao-teste.netlify.app'
+]);
+
+function normalizedOrigin(value) {
+  return (value || '').trim().replace(/\/$/, '');
 }
 
 function allowedOrigin(request) {
-  const expected = expectedOrigin();
-  const origin = (request.headers.get('origin') || '').trim().replace(/\/$/, '');
+  const origin = normalizedOrigin(request.headers.get('origin'));
   let requestOrigin = '';
-  try { requestOrigin = new URL(request.url).origin.replace(/\/$/, ''); } catch {}
-  if (!expected) return false;
-  if (origin) return origin === expected;
+  try { requestOrigin = normalizedOrigin(new URL(request.url).origin); } catch {}
+  // Keep the test site and its branch URL explicitly allowlisted. Do not widen
+  // the guard to arbitrary origins if CRM_ALLOWED_ORIGIN is misconfigured.
+  if (origin) return TEST_ALLOWED_ORIGINS.has(origin);
   // Same-origin GETs may omit Origin. Never allow an origin-less write.
-  return requestOrigin === expected && ['GET', 'HEAD'].includes(request.method);
+  return TEST_ALLOWED_ORIGINS.has(requestOrigin) && ['GET', 'HEAD'].includes(request.method);
 }
 
 function corsHeaders(request) {
-  const origin = (request.headers.get('origin') || '').trim().replace(/\/$/, '');
+  const origin = normalizedOrigin(request.headers.get('origin'));
   const headers = {
     'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS',
@@ -39,7 +44,7 @@ function corsHeaders(request) {
     'Access-Control-Max-Age': '600',
     'Access-Control-Allow-Credentials': 'true'
   };
-  if (origin && origin === expectedOrigin()) headers['Access-Control-Allow-Origin'] = origin;
+  if (origin && TEST_ALLOWED_ORIGINS.has(origin)) headers['Access-Control-Allow-Origin'] = origin;
   return headers;
 }
 
