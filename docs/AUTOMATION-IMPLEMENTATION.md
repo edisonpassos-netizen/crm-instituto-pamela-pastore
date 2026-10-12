@@ -22,7 +22,7 @@ Nenhuma migração foi aplicada ao Supabase de produção. O worker deve permane
 - Confirmar suporte e limites de Scheduled Functions no plano Netlify.
 
 ## Limitações que precisam ser resolvidas antes da produção
-- O adaptador de fila ainda aceita somente `lead_follow_up_requested` (`sourceType=task`). O CRM agora tem uma seção **Atendimentos** que registra cliente, serviço, data, status e consentimento explícito para pedido de avaliação; a elegibilidade é apenas calculada na interface e nenhum evento de avaliação é enfileirado ou enviado. Antes de habilitar `service_completed`, faltam testes dedicados de domínio, ligação do registro à fila e validação de idempotência/consentimento no servidor. Os eventos `appointment_completed` continuam rejeitados.
+- O adaptador aceita `lead_follow_up_requested` (`sourceType=task`) e `service_completed` (`sourceType=attendance`). Para `service_completed`, o servidor ignora dados de contato enviados pelo navegador e consulta `crm_app_state` para confirmar atendimento concluído, consentimento registrado, telefone válido e URL HTTPS antes de enfileirar. A chave única por atendimento evita duplicação. O worker repete a validação no estado persistido imediatamente antes do envio e cancela a tarefa se consentimento, telefone, status ou URL tiverem mudado. `appointment_completed` continua rejeitado.
 - Validar o modelo WhatsApp aprovado e seus parâmetros.
 - Testar a API real somente com credenciais do app Meta e número de teste, em ambiente isolado que use projeto Supabase de teste. Não reutilizar variáveis de produção no deploy de teste.
 - O primeiro envio real de validação será uma mensagem de teste ao número controlado pelo operador, não a clientes. A resposta HTTP da Meta indica aceitação; a confirmação de entrega deve chegar ao webhook.
@@ -39,11 +39,14 @@ Nenhuma migração foi aplicada ao Supabase de produção. O worker deve permane
 
 Critérios de avanço: CI verde; nenhum acesso público à fila; taxa de falhas explicada; entrega reconciliada via webhook; duplicatas e timeouts tratados; rollback documentado.
 - Testar login, leads, tarefas, vendas, registros de atendimento, migração de cache antigo e persistência do CRM atual.
+- Validar no ambiente isolado um modelo WhatsApp aprovado e seus parâmetros exatos; não usar clientes reais durante esse teste.
 
 
 ## Integração de eventos e confirmação de entrega — testes da branch isolada
 
 - Criar um follow-up no CRM gera um evento explícito `lead_follow_up_requested`, com canal `internal`; esse fluxo não manda WhatsApp.
+- Salvar um atendimento como `Concluído` com consentimento marcado gera um candidato `service_completed`. O servidor reconstrói destinatário e link a partir do estado persistido e não confia nos dados fornecidos pelo cliente.
+- Antes de enviar um pedido de avaliação, o worker confere novamente consentimento e dados atuais no CRM. O envio continua condicionado a `AUTOMATIONS_ENABLED=true`, `WHATSAPP_TEST_MODE=true`, destinatário na allowlist e modelo aprovado compatível com os parâmetros configurados.
 - O backend valida o tipo do evento, cria uma chave de deduplicação e chama `enqueue_crm_automation` com credencial exclusivamente do servidor, após confirmar a gravação do estado do CRM.
 - A interface mantém eventos não aceitos para novas tentativas; a chave única no banco torna o reenvio idempotente.
 - `whatsapp-status-webhook.mjs` valida o desafio GET e a assinatura HMAC SHA-256 de POST antes de atualizar o registro de tentativa associado ao ID da mensagem.
