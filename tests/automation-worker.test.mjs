@@ -59,9 +59,9 @@ test('unimplemented internal task is not reported as successful', async () => {
     const attempt = calls.find(call => call.url.includes('crm_automation_attempts'));
     const update = calls.find(call => call.url.includes('crm_automation_queue'));
     assert.equal(attempt.body.outcome, 'failed');
-    assert.match(attempt.body.detail, /ainda não implementada/i);
+    assert.match(attempt.body.detail, /não possui um reconciliador implementado/i);
     assert.equal(update.body.status, 'dead_letter');
-    assert.match(update.body.last_error, /nenhuma ação foi executada/i);
+    assert.match(update.body.last_error, /reconciliador implementado/i);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalUrl === undefined) delete process.env.SUPABASE_URL;
