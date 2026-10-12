@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { enqueueAutomationEvents } from './lib/automation-enqueue.mjs';
 
-const DEFAULT_ORIGIN = 'https://crm-automacao-teste.netlify.app';
+const DEFAULT_ORIGIN = 'https://peppy-salamander-2d8776.netlify.app';
 const SESSION_COOKIE = 'crm_session';
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
 
@@ -15,10 +15,6 @@ const json = (statusCode, body, extraHeaders = {}) => new Response(JSON.stringif
   headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extraHeaders }
 });
 
-const TEST_ALLOWED_ORIGINS = new Set([
-  DEFAULT_ORIGIN,
-  'https://feature-automation-engine--crm-automacao-teste.netlify.app'
-]);
 
 function normalizedOrigin(value) {
   return (value || '').trim().replace(/\/$/, '');
@@ -29,7 +25,7 @@ function configuredOrigins() {
     .split(',')
     .map(normalizedOrigin)
     .filter(Boolean);
-  return new Set([...TEST_ALLOWED_ORIGINS, ...configured]);
+  return new Set([DEFAULT_ORIGIN, ...configured]);
 }
 
 function isAllowedOrigin(origin) {
@@ -40,7 +36,7 @@ function allowedOrigin(request) {
   const origin = normalizedOrigin(request.headers.get('origin'));
   let requestOrigin = '';
   try { requestOrigin = normalizedOrigin(new URL(request.url).origin); } catch {}
-  // Permit only explicit test origins and origins configured by the site owner.
+  // Permit the official site origin and any additional origins explicitly configured by the site owner.
   // CRM_ALLOWED_ORIGIN may contain a comma-separated allowlist when needed.
   if (origin) return isAllowedOrigin(origin);
   // Same-origin GETs may omit Origin. Never allow an origin-less write.
