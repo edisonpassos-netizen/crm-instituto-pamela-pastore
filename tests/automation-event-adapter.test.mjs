@@ -55,5 +55,5 @@ test('unsupported events and malformed follow-up sources are rejected', () => {
   assert.throws(() => toAutomationCommand({
     type: 'lead_follow_up_requested', sourceType: 'task', sourceId: '',
     occurredAt: '2026-10-10T12:00:00.000Z'
-  }), /sourceType=task/);
+  }), /requires sourceId and valid occurredAt/);
 });
