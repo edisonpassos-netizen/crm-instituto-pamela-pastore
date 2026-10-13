@@ -59,7 +59,7 @@ test('unimplemented internal task is not reported as successful', async () => {
     const attempt = calls.find(call => call.url.includes('crm_automation_attempts'));
     const update = calls.find(call => call.url.includes('crm_automation_queue'));
     assert.equal(attempt.body.outcome, 'failed');
-    assert.match(attempt.body.detail, /ainda não está implementado/i);
+    assert.match(attempt.body.detail, /reconciliador implementado/i);
     assert.equal(update.body.status, 'dead_letter');
     assert.match(update.body.last_error, /ainda não está implementado/i);
   } finally {
