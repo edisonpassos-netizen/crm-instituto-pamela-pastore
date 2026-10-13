@@ -208,12 +208,74 @@ async function processJob(job) {
         await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
         return;
       }
-      // Presence of a task is not proof that a customer follow-up was sent.
-      // Until a real scheduler/dispatcher is implemented, never mark it completed.
-      const detail = 'Tarefa encontrada, mas o envio/agendamento automático do follow-up ainda não está implementado.';
-      await logAttempt(job, 'failed', detail);
+      const task = tasks.find(item => String(item?.id || '') === String(job.source_id));
+      if (!task) {
+        const detail = 'Follow-up não encontrado no estado persistido do CRM; verificar sincronização.';
+        await logAttempt(job, 'failed', detail);
+        await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
+        return;
+      }
+      if (task.done === true) {
+        const detail = 'Follow-up já concluído no CRM; nenhuma ação adicional necessária.';
+        await logAttempt(job, 'skipped', detail);
+        await updateJob(job, { status: 'cancelled', locked_at: null, last_error: detail });
+        return;
+      }
+      const taskDate = String(task.date || '');
+      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(taskDate) ||
+          !Number.isFinite(Date.parse(taskDate + 'T12:00:00.000Z'))) {
+        const detail = 'Data do follow-up ausente ou inválida; corrigir a tarefa no CRM.';
+        await logAttempt(job, 'failed', detail);
+        await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
+        return;
+      }
+      const lead = Array.isArray(data?.leads)
+        ? data.leads.find(item => String(item?.id || '') === String(task.leadId || ''))
+        : null;
+      if (!lead) {
+        const detail = 'Lead associado ao follow-up não encontrado no CRM.';
+        await logAttempt(job, 'failed', detail);
+        await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
+        return;
+      }
+      const phone = String(lead.phone || '').replace(/\\D/g, '');
+      if (phone.length < 10 || phone.length > 15) {
+        const detail = 'Telefone do lead ausente ou inválido; follow-up requer ação manual após corrigir o cadastro.';
+        await logAttempt(job, 'failed', detail);
+        await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
+        return;
+      }
+      const dueAt = new Date(taskDate + 'T12:00:00.000Z');
+      if (dueAt.getTime() > Date.now()) {
+        const detail = 'Follow-up validado e reagendado para a data cadastrada no CRM.';
+        await logAttempt(job, 'succeeded', detail);
+        await updateJob(job, {
+          status: 'pending', scheduled_at: dueAt.toISOString(), locked_at: null,
+          last_error: null,
+          payload: { ...(job.payload || {}), task_date: taskDate, lead_id: String(lead.id), lead_name: String(lead.name || '') }
+        });
+        return;
+      }
+      // Queue the validated task for an operator; this path intentionally does
+      // not contact the lead or claim that a WhatsApp message was sent.
+      const detail = 'Follow-up validado e pronto para atendimento manual; nenhuma mensagem foi enviada automaticamente.';
+      await logAttempt(job, 'succeeded', detail);
       await updateJob(job, {
-        status: 'dead_letter', locked_at: null, last_error: detail
+        status: 'awaiting_operator', locked_at: null, last_error: null,
+        payload: {
+          ...(job.payload || {}),
+          dispatch: {
+            state: 'ready_for_manual_contact',
+            task_id: String(task.id),
+            lead_id: String(lead.id),
+            lead_name: String(lead.name || ''),
+            recipient_phone: phone,
+            task_date: taskDate,
+            task_type: String(task.type || ''),
+            note: String(task.note || '').slice(0, 500),
+            prepared_at: new Date().toISOString()
+          }
+        }
       });
       return;
     }
