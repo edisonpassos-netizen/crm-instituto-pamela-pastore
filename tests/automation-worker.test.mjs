@@ -61,7 +61,7 @@ test('unimplemented internal task is not reported as successful', async () => {
     assert.equal(attempt.body.outcome, 'failed');
     assert.match(attempt.body.detail, /reconciliador implementado/i);
     assert.equal(update.body.status, 'dead_letter');
-    assert.match(update.body.last_error, /ainda não está implementado/i);
+    assert.match(update.body.last_error, /reconciliador implementado/i);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalUrl === undefined) delete process.env.SUPABASE_URL;
