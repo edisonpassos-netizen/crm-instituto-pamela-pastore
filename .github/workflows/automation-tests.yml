@@ -55,3 +55,9 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610120004_harden_automation_privileges.sql
       - name: Verify least-privilege grants and default ACLs
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/automation-privilege-hardening.sql
+      - name: Apply operator follow-up queue state migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610130005_followup_awaiting_operator.sql
+      - name: Apply atomic manual queue resolution migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610130006_atomic_manual_queue_resolution.sql
+      - name: Test manual resolution state, audit trail, conflicts, and grants
+        run: psql -v ON_ERROR_STOP=1 -f tests/sql/manual-queue-resolution.sql
