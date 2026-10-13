@@ -98,6 +98,7 @@ let cloudAvailable=false;
 let cloudWarning="";
 let saveQueue=Promise.resolve();
 let pendingAutomationEvents=[];
+let automationQueueItems=[];
 const stages=["Novo lead","Primeiro contato","Respondeu","Qualificado","Interessado","Oferta","Agendado","Confirmado","Compareceu","Venda realizada","Pós-venda","Recuperação","Perdido"];
 const services=["Pilates","Fisioterapia particular","Fisioterapia convênio","Estética facial","Estética corporal","Depilação a laser","Acupuntura","Ozonioterapia","Avaliação","Outro"];
 const sources=["Instagram","Facebook","WhatsApp","Google","Google Ads","Meta Ads","Indicação","Orgânico","Site","Landing Page","Presencial","Outro"];
@@ -322,11 +323,16 @@ async function loadAutomationQueue(){
   const data=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error(data.error||"Não foi possível consultar a fila.");
   const items=Array.isArray(data.items)?data.items:[];
+  automationQueueItems=items;
   if(!items.length){box.innerHTML='<div class="empty">Nenhuma tarefa aguardando ação manual.</div>';return}
-  box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Data programada</th><th>Lead</th><th>Telefone</th><th>Tipo</th><th>Observação</th><th>Ação</th></tr></thead><tbody>${items.map(item=>{const d=item.payload?.dispatch||{},phone=String(d.recipient_phone||"");return `<tr><td>${esc(d.task_date||item.scheduled_at?.slice(0,10)||"-")}</td><td><b>${esc(d.lead_name||"Lead")}</b></td><td>${esc(phone||"Não informado")}</td><td>${esc(d.task_type||"Follow-up")}</td><td>${esc(d.note||"")}</td><td><button class="btn small primary" onclick="recordAutomationOutcome('${esc(item.id)}','${esc(d.lead_name||"Lead")}','${esc(phone)}')">Registrar resultado</button></td></tr>`}).join("")}</tbody></table></div>`;
+  box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Data programada</th><th>Lead</th><th>Telefone</th><th>Tipo</th><th>Observação</th><th>Ação</th></tr></thead><tbody>${items.map(item=>{const d=item.payload?.dispatch||{},phone=String(d.recipient_phone||"");return `<tr><td>${esc(d.task_date||item.scheduled_at?.slice(0,10)||"-")}</td><td><b>${esc(d.lead_name||"Lead")}</b></td><td>${esc(phone||"Não informado")}</td><td>${esc(d.task_type||"Follow-up")}</td><td>${esc(d.note||"")}</td><td><button class="btn small primary" onclick="recordAutomationOutcome('${esc(item.id)}')">Registrar resultado</button></td></tr>`}).join("")}</tbody></table></div>`;
  }catch(error){box.innerHTML=`<div class="empty">${esc(error.message||"Erro ao carregar fila.")}</div>`}
 }
-function recordAutomationOutcome(queueId,leadName,phone){
+function recordAutomationOutcome(queueId){
+ const queued=automationQueueItems.find(item=>item.id===queueId);
+ if(!queued){toast("Tarefa não encontrada. Atualize a fila.");return}
+ const leadName=queued.payload?.dispatch?.lead_name||"Lead";
+ const phone=queued.payload?.dispatch?.recipient_phone||"";
  modal("Registrar resultado do follow-up",`<p><b>${esc(leadName)}</b><br><span class="muted">${esc(phone)}</span></p><form id="automationOutcomeForm" class="form"><div class="full"><label>Resultado do contato</label><select name="outcome" required><option value="contacted">Contato realizado</option><option value="no_answer">Sem resposta</option><option value="rescheduled">Cliente pediu retorno em outra data</option><option value="not_contacted">Não foi possível contatar</option></select></div><div class="full"><label>Observação (opcional)</label><textarea name="note" rows="3" maxlength="500" placeholder="Registre o que aconteceu ou a próxima ação."></textarea></div><div class="full"><p class="muted">Este registro apenas documenta o resultado informado pela equipe. Não envia WhatsApp nem confirma entrega.</p><button class="btn primary">Salvar resultado</button></div></form>`);
  document.getElementById("automationOutcomeForm").onsubmit=async e=>{e.preventDefault();const form=new FormData(e.target);const submit=e.target.querySelector('button[type="submit"],button:not([type])');if(submit)submit.disabled=true;try{const response=await fetch(API_URL+"?action=automation-queue-result",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({id:queueId,outcome:form.get("outcome"),note:form.get("note")})});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||"Não foi possível salvar o resultado.");closeModal();toast(result.message||"Resultado manual registrado.");await loadAutomationQueue()}catch(error){if(submit)submit.disabled=false;toast(error.message||"Erro ao registrar resultado.")}};
 }
