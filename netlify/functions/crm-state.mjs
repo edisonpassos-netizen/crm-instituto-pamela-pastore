@@ -184,23 +184,7 @@ async function supabaseQueueRequest(method, query = '', body = null) {
   return parsed;
 }
 
-async function recordManualOutcome(job, outcome, note) {
-  const { base, key } = (() => ({
-    base: (process.env.SUPABASE_URL || '').trim().replace(/\\/$/, ''),
-    key: (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
-  }))();
-  const response = await fetch(`${base}/rest/v1/crm_automation_attempts`, {
-    method: 'POST',
-    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify({
-      queue_id: job.id,
-      attempt_number: Number(job.attempts || 0),
-      outcome: 'skipped',
-      detail: `Resultado manual registrado (não é confirmação de envio): ${outcome}. ${String(note || '').slice(0, 350)}`
-    })
-  });
-  if (!response.ok) throw new Error('Não foi possível registrar o histórico do resultado manual.');
-}
+
 
 export default async (request) => {
   const cors = corsHeaders(request);
@@ -266,30 +250,21 @@ export default async (request) => {
     const outcome = String(body?.outcome || '').trim();
     const note = String(body?.note || '').trim().slice(0, 500);
     const allowedOutcomes = new Set(['contacted', 'no_answer', 'rescheduled', 'not_contacted']);
-    if (!/^[0-9a-f-]{36}$/i.test(id) || !allowedOutcomes.has(outcome)) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) || !allowedOutcomes.has(outcome)) {
       return json(400, { error: 'Identificador ou resultado inválido.' }, cors);
     }
     try {
-      const rows = await supabaseQueueRequest('GET',
-        `?id=eq.${encodeURIComponent(id)}&status=eq.awaiting_operator&select=id,status,payload,attempts&limit=1`);
-      const job = Array.isArray(rows) ? rows[0] : null;
-      if (!job) return json(409, { error: 'A tarefa não está mais aguardando ação manual. Atualize a fila.' }, cors);
-      const payload = {
-        ...(job.payload || {}),
-        dispatch: {
-          ...((job.payload || {}).dispatch || {}),
-          manual_result: outcome,
-          manual_note: note,
-          resolved_at: new Date().toISOString(),
-          resolved_by: 'crm_operator'
-        }
-      };
-      const updated = await supabaseQueueRequest('PATCH',
-        `?id=eq.${encodeURIComponent(id)}&status=eq.awaiting_operator&select=id,status`,
-        { status: 'completed', payload, locked_at: null, completed_at: new Date().toISOString(), last_error: null });
-      if (!Array.isArray(updated) || !updated.length) return json(409, { error: 'A tarefa foi alterada por outro operador. Atualize a fila.' }, cors);
-      await recordManualOutcome(job, outcome, note);
-      return json(200, { ok: true, item: updated[0], outcome, message: 'Resultado manual registrado. Nenhuma mensagem foi enviada pelo sistema.' }, cors);
+      const base = (process.env.SUPABASE_URL || '').trim().replace(/\\/$/, '');
+      const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+      const response = await fetch(`${base}/rest/v1/rpc/resolve_automation_queue_manual_result`, {
+        method: 'POST',
+        headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ p_queue_id: id, p_outcome: outcome, p_note: note, p_resolved_by: 'crm_operator' })
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error('Não foi possível registrar o resultado e o histórico de forma atômica.');
+      if (result?.conflict) return json(409, { error: 'A tarefa não está mais aguardando ação manual. Atualize a fila.' }, cors);
+      return json(200, { ok: true, item: result?.item || result, outcome, message: 'Resultado manual registrado. Nenhuma mensagem foi enviada pelo sistema.' }, cors);
     } catch (error) {
       return json(error?.status || 500, { error: error?.message || 'Não foi possível registrar o resultado.' }, cors);
     }
