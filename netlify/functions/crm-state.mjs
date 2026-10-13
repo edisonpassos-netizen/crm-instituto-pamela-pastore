@@ -160,7 +160,7 @@ async function supabaseRequest(method, query = '', body = null) {
 
 
 async function supabaseQueueRequest(method, query = '', body = null) {
-  const base = (process.env.SUPABASE_URL || '').trim().replace(/\\/$/, '');
+  const base = (process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!base || !key || key.startsWith('sb_publishable_')) {
     const err = new Error('Configuração secreta do Supabase ausente ou inválida.');
@@ -256,7 +256,7 @@ export default async (request) => {
       return json(400, { error: 'Identificador ou resultado inválido.' }, cors);
     }
     try {
-      const base = (process.env.SUPABASE_URL || '').trim().replace(/\\/$/, '');
+      const base = (process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
       const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
       const response = await fetch(`${base}/rest/v1/rpc/resolve_automation_queue_manual_result`, {
         method: 'POST',
