@@ -208,17 +208,20 @@ async function processJob(job) {
         await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
         return;
       }
-      await logAttempt(job, 'succeeded', 'Follow-up confirmado no estado persistido do CRM.');
+      // Presence of a task is not proof that a customer follow-up was sent.
+      // Until a real scheduler/dispatcher is implemented, never mark it completed.
+      const detail = 'Tarefa encontrada, mas o envio/agendamento automático do follow-up ainda não está implementado.';
+      await logAttempt(job, 'failed', detail);
       await updateJob(job, {
-        status: 'completed', locked_at: null,
-        completed_at: new Date().toISOString(), last_error: null
+        status: 'dead_letter', locked_at: null, last_error: detail
       });
       return;
     }
 
-    // External sends are intentionally blocked until an operator enables the worker.
+    // The adapter emits service_completed for this channel. Eligibility and
+    // persisted consent are checked above; keep the channel/event contract aligned.
     if (job.channel === 'google_review' && job.event_type !== 'service_completed') {
-      throw new Error('Canal de avaliação exige evento request_review.');
+      throw new Error('Canal de avaliação exige evento service_completed.');
     }
     const providerMessageId = await sendWhatsAppTemplate(job);
     await logAttempt(job, 'succeeded', 'Aceito pela API oficial do WhatsApp.', providerMessageId);
