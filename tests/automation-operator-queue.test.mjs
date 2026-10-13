@@ -60,6 +60,23 @@ test('operator queue endpoint requires a valid session and returns only awaiting
   } finally { restore(previous); }
 });
 
+test('explicit CRM origin allowlist does not implicitly trust production origin', async () => {
+  const previous = { fetch: globalThis.fetch, env: {
+    CRM_ALLOWED_ORIGIN: process.env.CRM_ALLOWED_ORIGIN,
+    CRM_SESSION_SECRET: process.env.CRM_SESSION_SECRET
+  }};
+  const testOrigin = 'https://crm-automacao-teste.netlify.app';
+  process.env.CRM_ALLOWED_ORIGIN = testOrigin;
+  process.env.CRM_SESSION_SECRET = SECRET;
+  globalThis.fetch = async () => new Response(JSON.stringify([{ id: QUEUE_ID, status: 'awaiting_operator' }]), { status: 200 });
+  try {
+    const accepted = await handler(request(testOrigin + '/.netlify/functions/crm-state?action=automation-queue'));
+    assert.equal(accepted.status, 200);
+    const denied = await handler(request(ORIGIN + '/.netlify/functions/crm-state?action=automation-queue'));
+    assert.equal(denied.status, 403);
+  } finally { restore(previous); }
+});
+
 test('manual result only resolves an awaiting job and records a clearly manual audit event', async () => {
   const previous = { fetch: globalThis.fetch, env: {
     SUPABASE_URL: process.env.SUPABASE_URL,
