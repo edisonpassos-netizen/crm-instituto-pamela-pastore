@@ -70,7 +70,9 @@ test('explicit CRM origin allowlist does not implicitly trust production origin'
   process.env.CRM_SESSION_SECRET = SECRET;
   globalThis.fetch = async () => new Response(JSON.stringify([{ id: QUEUE_ID, status: 'awaiting_operator' }]), { status: 200 });
   try {
-    const accepted = await handler(request(testOrigin + '/.netlify/functions/crm-state?action=automation-queue'));
+    const accepted = await handler(new Request(testOrigin + '/.netlify/functions/crm-state?action=automation-queue', {
+      headers: { Origin: testOrigin, Cookie: sessionCookie() }
+    }));
     assert.equal(accepted.status, 200);
     const denied = await handler(request(ORIGIN + '/.netlify/functions/crm-state?action=automation-queue'));
     assert.equal(denied.status, 403);
