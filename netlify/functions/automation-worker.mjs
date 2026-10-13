@@ -222,7 +222,7 @@ async function processJob(job) {
         return;
       }
       const taskDate = String(task.date || '');
-      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(taskDate) ||
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(taskDate) ||
           !Number.isFinite(Date.parse(taskDate + 'T12:00:00.000Z'))) {
         const detail = 'Data do follow-up ausente ou inválida; corrigir a tarefa no CRM.';
         await logAttempt(job, 'failed', detail);
@@ -238,7 +238,7 @@ async function processJob(job) {
         await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
         return;
       }
-      const phone = String(lead.phone || '').replace(/\\D/g, '');
+      const phone = String(lead.phone || '').replace(/\D/g, '');
       if (phone.length < 10 || phone.length > 15) {
         const detail = 'Telefone do lead ausente ou inválido; follow-up requer ação manual após corrigir o cadastro.';
         await logAttempt(job, 'failed', detail);
