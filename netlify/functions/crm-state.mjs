@@ -25,7 +25,9 @@ function configuredOrigins() {
     .split(',')
     .map(normalizedOrigin)
     .filter(Boolean);
-  return new Set([DEFAULT_ORIGIN, ...configured]);
+  // Use the production origin only as a fallback when no explicit allowlist exists.
+  // A configured test/preview origin must not implicitly trust the production CRM origin.
+  return new Set(configured.length ? configured : [DEFAULT_ORIGIN]);
 }
 
 function isAllowedOrigin(origin) {
