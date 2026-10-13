@@ -156,6 +156,52 @@ async function supabaseRequest(method, query = '', body = null) {
   return parsed;
 }
 
+
+async function supabaseQueueRequest(method, query = '', body = null) {
+  const base = (process.env.SUPABASE_URL || '').trim().replace(/\\/$/, '');
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  if (!base || !key || key.startsWith('sb_publishable_')) {
+    const err = new Error('Configuração secreta do Supabase ausente ou inválida.');
+    err.status = 500;
+    throw err;
+  }
+  const headers = { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' };
+  const options = { method, headers };
+  if (body !== null) {
+    headers['Content-Type'] = 'application/json';
+    headers.Prefer = 'return=representation';
+    options.body = JSON.stringify(body);
+  }
+  const response = await fetch(`${base}/rest/v1/crm_automation_queue${query}`, options);
+  const raw = await response.text();
+  let parsed = null;
+  try { parsed = raw ? JSON.parse(raw) : null; } catch {}
+  if (!response.ok) {
+    const err = new Error(`Supabase respondeu HTTP ${response.status} ao acessar a fila de automação.`);
+    err.status = response.status;
+    throw err;
+  }
+  return parsed;
+}
+
+async function recordManualOutcome(job, outcome, note) {
+  const { base, key } = (() => ({
+    base: (process.env.SUPABASE_URL || '').trim().replace(/\\/$/, ''),
+    key: (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+  }))();
+  const response = await fetch(`${base}/rest/v1/crm_automation_attempts`, {
+    method: 'POST',
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      queue_id: job.id,
+      attempt_number: Number(job.attempts || 0),
+      outcome: 'skipped',
+      detail: `Resultado manual registrado (não é confirmação de envio): ${outcome}. ${String(note || '').slice(0, 350)}`
+    })
+  });
+  if (!response.ok) throw new Error('Não foi possível registrar o histórico do resultado manual.');
+}
+
 export default async (request) => {
   const cors = corsHeaders(request);
   const url = new URL(request.url);
@@ -198,6 +244,55 @@ export default async (request) => {
     return validSession(request)
       ? json(200, { authenticated: true }, cors)
       : json(401, { authenticated: false }, cors);
+  }
+
+
+  if (action === 'automation-queue' && request.method === 'GET') {
+    if (!validSession(request)) return json(401, { error: 'Sessão expirada ou não autenticada.' }, cors);
+    try {
+      const rows = await supabaseQueueRequest('GET',
+        '?status=eq.awaiting_operator&select=id,event_type,source_type,source_id,payload,scheduled_at,created_at,attempts&order=scheduled_at.asc&limit=100');
+      return json(200, { items: Array.isArray(rows) ? rows : [] }, cors);
+    } catch (error) {
+      return json(error?.status || 500, { error: error?.message || 'Não foi possível consultar a fila.' }, cors);
+    }
+  }
+
+  if (action === 'automation-queue-result' && request.method === 'POST') {
+    if (!validSession(request)) return json(401, { error: 'Sessão expirada ou não autenticada.' }, cors);
+    let body;
+    try { body = await request.json(); } catch { return json(400, { error: 'Corpo JSON inválido.' }, cors); }
+    const id = String(body?.id || '').trim();
+    const outcome = String(body?.outcome || '').trim();
+    const note = String(body?.note || '').trim().slice(0, 500);
+    const allowedOutcomes = new Set(['contacted', 'no_answer', 'rescheduled', 'not_contacted']);
+    if (!/^[0-9a-f-]{36}$/i.test(id) || !allowedOutcomes.has(outcome)) {
+      return json(400, { error: 'Identificador ou resultado inválido.' }, cors);
+    }
+    try {
+      const rows = await supabaseQueueRequest('GET',
+        `?id=eq.${encodeURIComponent(id)}&status=eq.awaiting_operator&select=id,status,payload,attempts&limit=1`);
+      const job = Array.isArray(rows) ? rows[0] : null;
+      if (!job) return json(409, { error: 'A tarefa não está mais aguardando ação manual. Atualize a fila.' }, cors);
+      const payload = {
+        ...(job.payload || {}),
+        dispatch: {
+          ...((job.payload || {}).dispatch || {}),
+          manual_result: outcome,
+          manual_note: note,
+          resolved_at: new Date().toISOString(),
+          resolved_by: 'crm_operator'
+        }
+      };
+      const updated = await supabaseQueueRequest('PATCH',
+        `?id=eq.${encodeURIComponent(id)}&status=eq.awaiting_operator&select=id,status`,
+        { status: 'completed', payload, locked_at: null, completed_at: new Date().toISOString(), last_error: null });
+      if (!Array.isArray(updated) || !updated.length) return json(409, { error: 'A tarefa foi alterada por outro operador. Atualize a fila.' }, cors);
+      await recordManualOutcome(job, outcome, note);
+      return json(200, { ok: true, item: updated[0], outcome, message: 'Resultado manual registrado. Nenhuma mensagem foi enviada pelo sistema.' }, cors);
+    } catch (error) {
+      return json(error?.status || 500, { error: error?.message || 'Não foi possível registrar o resultado.' }, cors);
+    }
   }
 
   if (!['GET', 'PUT'].includes(request.method)) {
