@@ -74,9 +74,9 @@ test('manual result only resolves an awaiting job and records a clearly manual a
   globalThis.fetch = async (url, options = {}) => {
     const record = { url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null };
     requests.push(record);
-    if (record.url.includes('/crm_automation_queue?') && record.method === 'GET') return new Response(JSON.stringify([job]), { status: 200 });
-    if (record.url.includes('/crm_automation_queue?') && record.method === 'PATCH') return new Response(JSON.stringify([{ id: QUEUE_ID, status: 'completed' }]), { status: 200 });
-    if (record.url.includes('/crm_automation_attempts')) return new Response('', { status: 201 });
+    if (record.url.includes('/rpc/resolve_automation_queue_manual_result') && record.method === 'POST') {
+      return new Response(JSON.stringify({ conflict: false, item: { id: QUEUE_ID, status: 'completed' } }), { status: 200 });
+    }
     return new Response('unexpected request', { status: 500 });
   };
   try {
@@ -85,13 +85,13 @@ test('manual result only resolves an awaiting job and records a clearly manual a
     }));
     assert.equal(response.status, 200);
     assert.match((await response.json()).message, /Nenhuma mensagem foi enviada/);
-    const patch = requests.find(r => r.method === 'PATCH');
-    assert.equal(patch.body.status, 'completed');
-    assert.equal(patch.body.payload.dispatch.manual_result, 'contacted');
-    assert.equal(patch.body.payload.dispatch.manual_note, 'Contato telefônico realizado.');
-    const audit = requests.find(r => r.url.includes('/crm_automation_attempts'));
-    assert.equal(audit.body.outcome, 'skipped');
-    assert.match(audit.body.detail, /não é confirmação de envio/i);
+    const rpc = requests.find(r => r.url.includes('/rpc/resolve_automation_queue_manual_result'));
+    assert.equal(rpc.method, 'POST');
+    assert.equal(rpc.body.p_queue_id, QUEUE_ID);
+    assert.equal(rpc.body.p_outcome, 'contacted');
+    assert.equal(rpc.body.p_note, 'Contato telefônico realizado.');
+    assert.equal(requests.some(r => r.method === 'PATCH'), false);
+    assert.equal(requests.some(r => r.url.includes('/crm_automation_attempts')), false);
     assert.equal(requests.some(r => r.url.includes('graph.facebook.com')), false);
   } finally { restore(previous); }
 });
