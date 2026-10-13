@@ -3,7 +3,6 @@ on:
   push:
     branches: [feature/automation-engine]
   pull_request:
-    branches: [main]
 permissions:
   contents: read
 jobs:
