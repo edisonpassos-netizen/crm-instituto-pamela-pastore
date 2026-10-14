@@ -239,7 +239,7 @@ async function loadStore(){
  }catch(err){
    cloudAvailable=false;
    confirmedState=JSON.parse(JSON.stringify(state));
-   cloudWarning="Nuvem indisponível: alterações salvas somente neste navegador. Não feche sem exportar backup.";
+   cloudWarning="Nuvem indisponível: alterações não podem ser confirmadas. Recarregue quando a conexão voltar e exporte backup para preservar os dados locais.";
    setDbStatus("Nuvem indisponível • "+String(err?.message||"erro não identificado").slice(0,90),"warn");
    console.error("Falha ao carregar estado remoto:",err);
  }
