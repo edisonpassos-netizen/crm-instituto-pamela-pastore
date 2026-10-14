@@ -19,5 +19,5 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Run CRM regression and authentication tests
-        run: node --test tests/crm-security-hardening.test.mjs tests/persistence-behavior.test.mjs tests/crm-auth-e2e.test.mjs
+      - name: Run CRM regression, auth and WhatsApp safety tests
+        run: node --test tests/crm-security-hardening.test.mjs tests/persistence-behavior.test.mjs tests/crm-auth-e2e.test.mjs tests/whatsapp-safety.test.mjs
