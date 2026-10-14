@@ -1,0 +1,23 @@
+name: CRM Security Regression Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [fix/crm-security-hardening, fix/persistence-reliability]
+
+permissions:
+  contents: read
+
+jobs:
+  crm-security-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run CRM regression, auth and WhatsApp safety tests
+        run: node --test tests/crm-security-hardening.test.mjs tests/persistence-behavior.test.mjs tests/crm-auth-e2e.test.mjs tests/whatsapp-safety.test.mjs
