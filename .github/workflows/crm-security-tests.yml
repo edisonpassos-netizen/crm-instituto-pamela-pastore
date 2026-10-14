@@ -20,4 +20,4 @@ jobs:
         with:
           node-version: 22
       - name: Run CRM security regression tests
-        run: node --test tests/crm-security-hardening.test.mjs
+        run: node --test tests/crm-security-hardening.test.mjs tests/persistence-behavior.test.mjs
