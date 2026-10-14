@@ -19,7 +19,7 @@ test('WhatsApp links use noopener and noreferrer', () => {
 test('destructive reset is explicit, guarded, and requires a typed confirmation', () => {
   const fn = html.match(/async function clearData\(\)\{[^\n]*/)?.[0] || '';
   assert.ok(fn, 'clearData function should exist');
-  assert.match(fn, /if\(!cloudAvailable\)/);
+  assert.match(fn, /if\(!cloudAvailable\|\|cloudWarning\)/);
   assert.match(fn, /digite APAGAR/);
   assert.match(fn, /NUVEM e neste navegador/);
   assert.match(fn, /await saveStore\(\)/);
