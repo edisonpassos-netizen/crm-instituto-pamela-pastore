@@ -70,10 +70,11 @@ function validSession(request) {
   const cookieHeader = request.headers.get('cookie') || '';
   const cookie = cookieHeader.split(';').map(v => v.trim()).find(v => v.startsWith(SESSION_COOKIE + '='));
   if (!cookie) return false;
-  const token = decodeURIComponent(cookie.slice(SESSION_COOKIE.length + 1));
-  const parts = token.split('.');
-  if (parts.length !== 2) return false;
   try {
+    // Malformed percent-encoding must fail closed as an invalid session, not throw.
+    const token = decodeURIComponent(cookie.slice(SESSION_COOKIE.length + 1));
+    const parts = token.split('.');
+    if (parts.length !== 2) return false;
     if (!safeEqual(sign(parts[0]), parts[1])) return false;
     const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
     return Number.isFinite(payload.exp) && payload.exp > Math.floor(Date.now() / 1000);
