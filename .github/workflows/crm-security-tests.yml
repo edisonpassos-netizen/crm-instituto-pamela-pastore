@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [fix/crm-security-hardening]
+    branches: [fix/crm-security-hardening, fix/persistence-reliability]
 
 permissions:
   contents: read
