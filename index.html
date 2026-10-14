@@ -175,8 +175,8 @@ async function saveStore(){
  const snapshot=normalizeState(JSON.parse(JSON.stringify(state)));
  const version=++saveVersion;
  saveQueue=saveQueue.catch(()=>{}).then(async()=>{
-   if(!cloudAvailable)return {ok:false,status:"unavailable",error:"Banco remoto indisponível"};
-   if(cloudWarning)return {ok:false,status:"blocked",error:"Há uma sincronização pendente; recarregue o CRM antes de continuar"};
+   if(!cloudAvailable){if(version===saveVersion)state=JSON.parse(JSON.stringify(confirmedState));return {ok:false,status:"unavailable",error:"Banco remoto indisponível"}}
+   if(cloudWarning){if(version===saveVersion)state=JSON.parse(JSON.stringify(confirmedState));return {ok:false,status:"blocked",error:"Há uma sincronização pendente; recarregue o CRM antes de continuar"}}
    try{
      const result=await requestCloud("PUT",{data:snapshot,revision:cloudRevision});
      cloudRevision=result.revision;
