@@ -96,10 +96,13 @@ let cloudRevision=null;
 let cloudAvailable=false;
 let cloudWarning="";
 let saveQueue=Promise.resolve();
+let confirmedState;
+let saveVersion=0;
 const stages=["Novo lead","Primeiro contato","Respondeu","Qualificado","Interessado","Oferta","Agendado","Confirmado","Compareceu","Venda realizada","Pós-venda","Recuperação","Perdido"];
 const services=["Pilates","Fisioterapia particular","Fisioterapia convênio","Estética facial","Estética corporal","Depilação a laser","Acupuntura","Ozonioterapia","Avaliação","Outro"];
 const sources=["Instagram","Facebook","WhatsApp","Google","Google Ads","Meta Ads","Indicação","Orgânico","Site","Landing Page","Presencial","Outro"];
 let state={id:"state",page:"dashboard", leads:[], tasks:[], sales:[], settings:{studioName:"Studio Pâmela Pastore",primary:"#1A8690"}};
+confirmedState=JSON.parse(JSON.stringify(state));
 let db;
 
 function id(){return crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random().toString(16).slice(2)}
@@ -169,18 +172,49 @@ function hasLocalBusinessData(s){return Boolean(s&&(s.leads?.length||s.tasks?.le
 function isDefaultCloudState(s){return Boolean(s&&!s.leads?.length&&!s.tasks?.length&&!s.sales?.length);}
 async function saveStore(){
  state.id="state";
- const snapshot=JSON.parse(JSON.stringify(state));
+ const snapshot=normalizeState(JSON.parse(JSON.stringify(state)));
+ const version=++saveVersion;
  saveQueue=saveQueue.catch(()=>{}).then(async()=>{
-   await saveLocalCache(snapshot);
+   if(!cloudAvailable)return {ok:false,status:"unavailable",error:"Banco remoto indisponível"};
+   if(cloudWarning)return {ok:false,status:"blocked",error:"Há uma sincronização pendente; recarregue o CRM antes de continuar"};
    try{
-     if(!cloudAvailable)throw new Error("Banco remoto ainda não está disponível");
      const result=await requestCloud("PUT",{data:snapshot,revision:cloudRevision});
-     cloudRevision=result.revision;cloudWarning="";
+     cloudRevision=result.revision;
+     confirmedState=JSON.parse(JSON.stringify(snapshot));
+     cloudWarning="";
      setDbStatus("Supabase conectado • dados na nuvem","ok");
+     try{await saveLocalCache(snapshot)}catch(cacheErr){
+       setDbStatus("Supabase conectado • cache local indisponível","warn");
+       console.error("Gravação remota confirmada, mas o cache local falhou:",cacheErr);
+     }
+     return {ok:true,status:"confirmed"};
    }catch(err){
-     cloudWarning="Nuvem indisponível: alterações salvas somente neste navegador. Não feche sem exportar backup.";
-     setDbStatus("Nuvem indisponível • "+String(err?.message||"erro não identificado").slice(0,90),"warn");
-     console.error("Falha ao persistir no Supabase:",err);
+     try{
+       const current=await requestCloud("GET");
+       const remote=normalizeState(current.data);
+       cloudAvailable=true;
+       cloudRevision=current.revision;
+       if(JSON.stringify(remote)===JSON.stringify(snapshot)){
+         confirmedState=JSON.parse(JSON.stringify(remote));
+         cloudWarning="";
+         setDbStatus("Supabase conectado • gravação confirmada após reconciliação","ok");
+         try{await saveLocalCache(remote)}catch(cacheErr){console.error("Falha no cache local após reconciliação:",cacheErr)}
+         return {ok:true,status:"confirmed_reconciled"};
+       }
+       confirmedState=JSON.parse(JSON.stringify(remote));
+       cloudWarning="Conflito de sincronização: o servidor contém outra versão. Recarregue o CRM antes de continuar.";
+       setDbStatus("Conflito de sincronização • recarregue o CRM","warn");
+       if(version===saveVersion)state=JSON.parse(JSON.stringify(confirmedState));
+       console.error("Gravação não confirmada; o estado remoto foi preservado:",err);
+       return {ok:false,status:"conflict",error:cloudWarning};
+     }catch(reconcileErr){
+       cloudAvailable=false;
+       cloudWarning="Não foi possível confirmar a gravação remota. Não faça novas alterações; recarregue o CRM e confira os dados.";
+       setDbStatus("Sincronização não confirmada • recarregue o CRM","warn");
+       if(version===saveVersion)state=JSON.parse(JSON.stringify(confirmedState));
+       console.error("Falha ao persistir e reconciliar o estado remoto:",err,reconcileErr);
+       return {ok:false,status:"unknown",error:cloudWarning};
+     }
    }
  });
  return saveQueue;
@@ -199,17 +233,19 @@ async function loadStore(){
      cloudRevision=saved.revision;state=localState;
    }else state=cloudState;
    state=normalizeState(state);
+   confirmedState=JSON.parse(JSON.stringify(state));
    await saveLocalCache(state);
    setDbStatus("Supabase conectado • dados na nuvem","ok");
  }catch(err){
    cloudAvailable=false;
+   confirmedState=JSON.parse(JSON.stringify(state));
    cloudWarning="Nuvem indisponível: alterações salvas somente neste navegador. Não feche sem exportar backup.";
    setDbStatus("Nuvem indisponível • "+String(err?.message||"erro não identificado").slice(0,90),"warn");
    console.error("Falha ao carregar estado remoto:",err);
  }
 }
 function openDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(APP,1);r.onupgradeneeded=()=>r.result.createObjectStore("store",{keyPath:"id"});r.onsuccess=()=>{db=r.result;loadStore().then(resolve).catch(reject)};r.onerror=()=>reject(r.error)})}
-function setPage(p){state.page=p;saveStore();render()}
+async function setPage(p){state.page=p;const saved=await saveStore();if(!saved.ok){render();toast("A alteração não foi confirmada no servidor. Recarregue o CRM antes de continuar.");return}render()}
 function modal(title,body){document.getElementById("modal").innerHTML=`<div class="modal-head"><h2>${title}</h2><button class="btn small" onclick="closeModal()">✕</button></div><div style="margin-top:16px">${body}</div>`;document.getElementById("modalBack").style.display="flex"}
 function closeModal(){document.getElementById("modalBack").style.display="none"}
 function badgeTemp(t){let c=t==="Quente"?"b-hot":t==="Morno"?"b-warm":"b-cold";return `<span class="badge ${c}">${esc(t||"Frio")}</span>`}
@@ -279,11 +315,11 @@ function editLead(id0){
  <div class="full"><label>Indicadores de intenção</label><div class="toolbar">${["interest","priceAsked","requestedTime","appointment","attended","bought"].map(k=>`<label style="font-weight:500"><input type="checkbox" name="${k}" ${l[k]?"checked":""} style="width:auto"> ${({interest:"Demonstrou interesse",priceAsked:"Perguntou preço",requestedTime:"Pediu horário",appointment:"Agendou",attended:"Compareceu",bought:"Comprou"})[k]}</label>`).join("")}</div></div>
  <div class="full toolbar"><button class="btn primary" type="submit">Salvar lead</button>${id0?`<button class="btn" type="button" data-crm-action="wa" data-record-value="${esc(l.phone||"")}">💬 WhatsApp</button><button class="btn danger" type="button" data-crm-action="deleteLead" data-record-id="${esc(l.id)}">Excluir</button>`:""} </div>
  </form>`);
- document.getElementById("leadForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const x={...l,name:f.get("name").trim(),phone:f.get("phone").trim(),email:f.get("email").trim(),service:f.get("service"),source:f.get("source"),campaign:f.get("campaign"),status:f.get("status"),temperature:f.get("temperature"),notes:f.get("notes"),createdAt:l.createdAt||new Date().toISOString()};["interest","priceAsked","requestedTime","appointment","attended","bought"].forEach(k=>x[k]=f.get(k)==="on");if(id0){state.leads=state.leads.map(a=>a.id===l.id?x:a)}else state.leads.unshift(x);await saveStore();closeModal();toast("Lead salvo com sucesso");render()};
+ document.getElementById("leadForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const x={...l,name:f.get("name").trim(),phone:f.get("phone").trim(),email:f.get("email").trim(),service:f.get("service"),source:f.get("source"),campaign:f.get("campaign"),status:f.get("status"),temperature:f.get("temperature"),notes:f.get("notes"),createdAt:l.createdAt||new Date().toISOString()};["interest","priceAsked","requestedTime","appointment","attended","bought"].forEach(k=>x[k]=f.get(k)==="on");if(id0){state.leads=state.leads.map(a=>a.id===l.id?x:a)}else state.leads.unshift(x);const saved=await saveStore();if(!saved.ok){render();toast("Lead não salvo no servidor. Recarregue o CRM e tente novamente.");return}closeModal();toast("Lead salvo com sucesso");render()};
 }
-function deleteLead(id0){if(confirm("Excluir este lead?")){state.leads=state.leads.filter(x=>x.id!==id0);saveStore();closeModal();render()}}
+async function deleteLead(id0){if(confirm("Excluir este lead?")){state.leads=state.leads.filter(x=>x.id!==id0);const saved=await saveStore();if(!saved.ok){render();toast("Exclusão não confirmada. Recarregue o CRM e confira os dados.");return}closeModal();render()}}
 function moveLead(id0){const l=state.leads.find(x=>x.id===id0);modal("Mover lead",`<label>Nova etapa</label><select id="moveStage">${stages.map(s=>`<option ${s===l.status?"selected":""}>${s}</option>`).join("")}</select><div style="margin-top:12px"><button class="btn primary" data-crm-action="applyMove" data-record-id="${esc(id0)}">Salvar etapa</button></div>`)}
-function applyMove(id0){const l=state.leads.find(x=>x.id===id0);l.status=document.getElementById("moveStage").value;saveStore();closeModal();render()}
+async function applyMove(id0){const l=state.leads.find(x=>x.id===id0);if(!l)return;l.status=document.getElementById("moveStage").value;const saved=await saveStore();if(!saved.ok){render();toast("Etapa não salva no servidor. Recarregue o CRM.");return}closeModal();render()}
 
 function pipeline(v){
  v.innerHTML=`<div class="toolbar"><button class="btn primary" onclick="newLead()">➕ Novo lead</button><span class="muted">Arrastar e soltar também pode ser adicionado em uma próxima evolução; nesta V1, use “Mover”.</span></div><div class="section"><div class="pipeline">${stages.map(s=>`<div class="column"><h3>${esc(s)} <span class="badge">${state.leads.filter(l=>l.status===s).length}</span></h3>${state.leads.filter(l=>l.status===s).map(l=>`<div class="lead-card"><strong>${esc(l.name)}</strong><small>${esc(l.service||"")}<br>${badgeTemp(l.temperature)} • Score ${score(l)}</small><div class="actions"><button class="btn small" data-crm-action="editLead" data-record-id="${esc(l.id)}">Abrir</button><button class="btn small" data-crm-action="moveLead" data-record-id="${esc(l.id)}">Mover</button><button class="btn small" data-crm-action="wa" data-record-value="${esc(l.phone||"")}">💬</button></div></div>`).join("")||'<div class="muted" style="font-size:12px">Sem leads</div>'}</div>`).join("")}</div></div>`;
@@ -296,24 +332,24 @@ function tasks(v){
 function newTask(){
  const opts=state.leads.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join("");
  modal("Novo follow-up",`<form id="taskForm" class="form"><div><label>Lead</label><select name="leadId">${opts}</select></div><div><label>Data</label><input type="date" name="date" value="${today()}"></div><div><label>Tipo</label><select name="type"><option>WhatsApp</option><option>Ligação</option><option>Retorno</option><option>Reativação</option><option>Outro</option></select></div><div class="full"><label>Observação</label><textarea name="note" rows="3"></textarea></div><div class="full"><button class="btn primary">Salvar</button></div></form>`);
- document.getElementById("taskForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);state.tasks.push({id:id(),leadId:f.get("leadId"),date:f.get("date"),type:f.get("type"),note:f.get("note"),done:false});await saveStore();closeModal();render();toast("Follow-up criado")};
+ document.getElementById("taskForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);state.tasks.push({id:id(),leadId:f.get("leadId"),date:f.get("date"),type:f.get("type"),note:f.get("note"),done:false});const saved=await saveStore();if(!saved.ok){render();toast("Follow-up não confirmado no servidor. Recarregue o CRM.");return}closeModal();render();toast("Follow-up criado")};
 }
-function toggleTask(id0){const t=state.tasks.find(x=>x.id===id0);t.done=!t.done;saveStore();render()}
-function autoTasks(){let created=0;state.leads.filter(l=>!["Venda realizada","Perdido"].includes(l.status)).forEach(l=>{if(!state.tasks.some(t=>t.leadId===l.id&&!t.done)){state.tasks.push({id:id(),leadId:l.id,date:today(),type:"Follow-up",note:"Verificar oportunidade e entrar em contato.",done:false});created++}});saveStore();toast(`${created} follow-up(s) criado(s)`);render()}
+async function toggleTask(id0){const t=state.tasks.find(x=>x.id===id0);if(!t)return;t.done=!t.done;const saved=await saveStore();if(!saved.ok){render();toast("Alteração do follow-up não confirmada. Recarregue o CRM.");return}render()}
+async function autoTasks(){let created=0;state.leads.filter(l=>!["Venda realizada","Perdido"].includes(l.status)).forEach(l=>{if(!state.tasks.some(t=>t.leadId===l.id&&!t.done)){state.tasks.push({id:id(),leadId:l.id,date:today(),type:"Follow-up",note:"Verificar oportunidade e entrar em contato.",done:false});created++}});const saved=await saveStore();if(!saved.ok){render();toast("Follow-ups não confirmados no servidor. Recarregue o CRM.");return}toast(`${created} follow-up(s) criado(s)`);render()}
 
 function sales(v){
  v.innerHTML=`<div class="toolbar"><button class="btn primary" onclick="newSale()">💰 Registrar venda</button></div><div class="section"><div class="table-wrap"><table><thead><tr><th>Data</th><th>Cliente/Lead</th><th>Serviço</th><th>Valor</th><th>Pagamento</th><th>Responsável</th></tr></thead><tbody>${state.sales.map(s=>`<tr><td>${esc(s.date)}</td><td>${esc(state.leads.find(l=>l.id===s.leadId)?.name||s.name||"-")}</td><td>${esc(s.service)}</td><td><b>${money(s.value)}</b></td><td>${esc(s.payment)}</td><td>${esc(s.owner||"-")}</td></tr>`).join("")||`<tr><td colspan="6"><div class="empty">Nenhuma venda registrada.</div></td></tr>`}</tbody></table></div></div>`;
 }
 function newSale(){
  modal("Registrar venda",`<form id="saleForm" class="form"><div><label>Lead/Cliente</label><select name="leadId">${state.leads.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join("")}</select></div><div><label>Serviço</label><select name="service">${services.map(s=>`<option>${s}</option>`).join("")}</select></div><div><label>Valor</label><input type="number" step="0.01" name="value" required></div><div><label>Pagamento</label><select name="payment"><option>Pix</option><option>Dinheiro</option><option>Cartão crédito</option><option>Cartão débito</option><option>Outro</option></select></div><div><label>Data</label><input type="date" name="date" value="${today()}"></div><div><label>Responsável</label><input name="owner"></div><div class="full"><button class="btn primary">Registrar venda</button></div></form>`);
- document.getElementById("saleForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target),lead=state.leads.find(l=>l.id===f.get("leadId"));if(lead){lead.bought=true;lead.attended=true;lead.status="Venda realizada"}state.sales.unshift({id:id(),leadId:f.get("leadId"),service:f.get("service"),value:Number(f.get("value")),payment:f.get("payment"),date:f.get("date"),owner:f.get("owner")});await saveStore();closeModal();render();toast("Venda registrada")};
+ document.getElementById("saleForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target),lead=state.leads.find(l=>l.id===f.get("leadId"));if(lead){lead.bought=true;lead.attended=true;lead.status="Venda realizada"}state.sales.unshift({id:id(),leadId:f.get("leadId"),service:f.get("service"),value:Number(f.get("value")),payment:f.get("payment"),date:f.get("date"),owner:f.get("owner")});const saved=await saveStore();if(!saved.ok){render();toast("Venda não confirmada no servidor. Recarregue o CRM.");return}closeModal();render();toast("Venda registrada")};
 }
 
 function recovery(v){
  const arr=state.leads.filter(l=>["Perdido","Recuperação"].includes(l.status)||(!l.bought&&l.createdAt&&Date.now()-new Date(l.createdAt).getTime()>7*86400000));
  v.innerHTML=`<div class="section"><h2>🔄 Central de recuperação</h2><p class="muted">Leads sem conversão, perdidos ou parados. O objetivo é transformar oportunidade esquecida em novo contato.</p><div class="table-wrap"><table><thead><tr><th>Lead</th><th>Serviço</th><th>Etapa</th><th>Score</th><th>Ação</th></tr></thead><tbody>${arr.map(l=>`<tr><td><b>${esc(l.name)}</b><br>${esc(l.phone)}</td><td>${esc(l.service)}</td><td>${esc(l.status)}</td><td>${score(l)}</td><td><div class="actions"><button class="btn small primary" data-crm-action="recoverLead" data-record-id="${esc(l.id)}">Recuperar</button><button class="btn small" data-crm-action="wa" data-record-value="${esc(l.phone||"")}">💬 WhatsApp</button></div></td></tr>`).join("")||`<tr><td colspan="5"><div class="empty">Nenhum lead elegível para recuperação.</div></td></tr>`}</tbody></table></div></div>`;
 }
-function recoverLead(id0){const l=state.leads.find(x=>x.id===id0);l.status="Recuperação";l.temperature="Quente";state.tasks.push({id:id(),leadId:id0,date:today(),type:"Reativação",note:"Contato de recuperação.",done:false});saveStore();wa(l.phone);render()}
+async function recoverLead(id0){const l=state.leads.find(x=>x.id===id0);if(!l)return;l.status="Recuperação";l.temperature="Quente";state.tasks.push({id:id(),leadId:id0,date:today(),type:"Reativação",note:"Contato de recuperação.",done:false});const saved=await saveStore();if(!saved.ok){render();toast("Recuperação não confirmada. O WhatsApp não será aberto até a gravação ser confirmada.");return}wa(l.phone);render()}
 
 function reports(v){
  const rev=state.sales.reduce((a,x)=>a+Number(x.value||0),0),won=state.leads.filter(l=>l.bought).length, total=state.leads.length, ap=state.leads.filter(l=>l.appointment).length;
@@ -383,9 +419,9 @@ function mapRow(r){
    notes:o.comentarios||o.comentario||""
  };
 }
-function mergeRows(rows){let add=0,upd=0;rows.forEach(r=>{const x=mapRow(r);if(!x.name)return;let normalizedPhone=String(x.phone||"").replace(/\D/g,"");
+async function mergeRows(rows){let add=0,upd=0;rows.forEach(r=>{const x=mapRow(r);if(!x.name)return;let normalizedPhone=String(x.phone||"").replace(/\D/g,"");
  let ex=normalizedPhone ? state.leads.find(l=>String(l.phone||"").replace(/\D/g,"")===normalizedPhone) : null;
- if(!ex && x.name) ex=state.leads.find(l=>String(l.name||"").trim().toLowerCase()===String(x.name||"").trim().toLowerCase());if(ex){Object.assign(ex,x);upd++}else{state.leads.push({...x,id:id(),createdAt:new Date().toISOString(),interest:false,priceAsked:false,requestedTime:false,appointment:false,attended:false,bought:false});add++}});saveStore();document.getElementById("importMsg").innerHTML=`<span class="badge b-success">${add} importados • ${upd} atualizados • duplicados por telefone tratados</span>`;toast("Importação concluída")}
+ if(!ex && x.name) ex=state.leads.find(l=>String(l.name||"").trim().toLowerCase()===String(x.name||"").trim().toLowerCase());if(ex){Object.assign(ex,x);upd++}else{state.leads.push({...x,id:id(),createdAt:new Date().toISOString(),interest:false,priceAsked:false,requestedTime:false,appointment:false,attended:false,bought:false});add++}});const saved=await saveStore();if(!saved.ok){render();document.getElementById("importMsg").textContent="Importação não confirmada no servidor. Recarregue o CRM antes de tentar novamente.";toast("Importação não confirmada.");return}document.getElementById("importMsg").innerHTML=`<span class="badge b-success">${add} importados • ${upd} atualizados • duplicados por telefone tratados</span>`;toast("Importação concluída")}
 function parseCSV(txt){let lines=txt.replace(/^\uFEFF/,"").split(/\r?\n/).filter(x=>x.trim());if(!lines.length)return[];const parse=l=>{let a=[],cur="",q=false;for(let i=0;i<l.length;i++){let c=l[i];if(c==='"'){if(q&&l[i+1]==='"'){cur+='"';i++}else q=!q}else if(c===","&&!q){a.push(cur);cur=""}else cur+=c}a.push(cur);return a};let h=parse(lines[0]);return lines.slice(1).map(l=>{let a=parse(l),o={};h.forEach((k,i)=>o[k]=a[i]||"");return o})}
 function u16(a,o){return a[o]|a[o+1]<<8}function u32(a,o){return (a[o]|a[o+1]<<8|a[o+2]<<16|a[o+3]<<24)>>>0}
 async function unzipStore(buf){const a=new Uint8Array(buf),out={};let p=0;while(p<a.length-4){if(u32(a,p)!==0x04034b50){p++;continue}let method=u16(a,p+8),cs=u32(a,p+18),ns=u16(a,p+26),es=u16(a,p+28),name=new TextDecoder().decode(a.slice(p+30,p+30+ns)),data=a.slice(p+30+ns+es,p+30+ns+es+cs);if(method===0)out[name]=data;else if(method===8&&"DecompressionStream"in window){let ds=new DecompressionStream("deflate-raw"),ab=await new Response(new Blob([data]).stream().pipeThrough(ds)).arrayBuffer();out[name]=new Uint8Array(ab)}else throw new Error("Navegador sem suporte a descompressão XLSX");p+=30+ns+es+cs}return out}
@@ -443,13 +479,13 @@ function exportCSV(){const h=["Nome","Telefone","Email","Serviço","Origem","Cam
 function downloadBlob(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 function backupPage(v){v.innerHTML=`<div class="section"><h2>💾 Backup e restauração</h2><p class="muted">O backup contém leads, follow-ups, vendas e configurações. O arquivo é salvo no seu computador; ele não substitui o backup do banco remoto.</p><div class="toolbar"><button class="btn primary" onclick="backup()">Fazer backup</button><input id="backupFile" type="file" accept=".json"><button class="btn" onclick="restore()">Restaurar backup</button></div><p class="muted" style="margin-top:14px">Recomendação: faça backup antes de grandes importações.</p></div>`}
 function backup(){const blob=new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),state},null,2)],{type:"application/json"});downloadBlob(blob,"Studio_Pamela_CRM_Backup_"+today()+".json");toast("Backup criado")}
-async function restore(){const f=document.getElementById("backupFile").files[0];if(!f)return toast("Selecione um backup");if(f.size>10*1024*1024)return toast("Backup excede o limite de 10 MB");if(!confirm("Restaurar substituirá os dados atuais. Faça um backup antes. Continuar?"))return;try{const x=JSON.parse(await f.text());if(x.version!==1||!x.state||typeof x.state!=="object"||Array.isArray(x.state)||!Array.isArray(x.state.leads)||!Array.isArray(x.state.tasks)||!Array.isArray(x.state.sales)||!x.state.settings||typeof x.state.settings!=="object"||Array.isArray(x.state.settings))throw new Error("Backup inválido");state=normalizeState(x.state);await saveStore();if(cloudWarning)throw new Error("A gravação remota não foi confirmada");toast("Backup restaurado");render()}catch(e){toast("Backup inválido ou não sincronizado. Confira o status da nuvem e preserve o arquivo original.")}}
+async function restore(){const f=document.getElementById("backupFile").files[0];if(!f)return toast("Selecione um backup");if(f.size>10*1024*1024)return toast("Backup excede o limite de 10 MB");if(!confirm("Restaurar substituirá os dados atuais. Faça um backup antes. Continuar?"))return;try{const x=JSON.parse(await f.text());if(x.version!==1||!x.state||typeof x.state!=="object"||Array.isArray(x.state)||!Array.isArray(x.state.leads)||!Array.isArray(x.state.tasks)||!Array.isArray(x.state.sales)||!x.state.settings||typeof x.state.settings!=="object"||Array.isArray(x.state.settings))throw new Error("Backup inválido");state=normalizeState(x.state);const saved=await saveStore();if(!saved.ok)throw new Error("A gravação remota não foi confirmada: "+saved.status);toast("Backup restaurado");render()}catch(e){toast("Backup inválido ou não sincronizado. Confira o status da nuvem e preserve o arquivo original.")}}
 function settings(v){v.innerHTML=`<div class="section"><h2>⚙️ Configurações</h2><form id="settingsForm" class="form"><div><label>Nome do Studio</label><input name="studioName" value="${esc(state.settings.studioName)}"></div><div><label>Cor principal</label><input name="primary" value="${esc(state.settings.primary)}"></div><div><label>Mensagem de primeiro contato</label><input name="firstMsg" value="${esc(state.settings.firstMsg||"Olá! Vi que você entrou em contato com o Studio Pâmela Pastore. Como posso te ajudar?")}"></div><div class="full"><button class="btn primary">Salvar configurações</button></div></form></div>
  <div class="section"><h2>🧪 Diagnóstico</h2><p class="muted">Banco: ${cloudAvailable?"Supabase/PostgreSQL":"cache local (nuvem indisponível)"} • Registros: ${state.leads.length} leads, ${state.tasks.length} follow-ups, ${state.sales.length} vendas.</p><button class="btn" onclick="demoData()">Carregar dados de demonstração</button><button class="btn danger" onclick="clearData()">Apagar dados do CRM (nuvem e navegador)</button></div>`;
- document.getElementById("settingsForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);state.settings.studioName=f.get("studioName");state.settings.primary=f.get("primary");state.settings.firstMsg=f.get("firstMsg");document.documentElement.style.setProperty("--primary",state.settings.primary);await saveStore();toast("Configurações salvas");render()};
+ document.getElementById("settingsForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);state.settings.studioName=f.get("studioName");state.settings.primary=f.get("primary");state.settings.firstMsg=f.get("firstMsg");document.documentElement.style.setProperty("--primary",state.settings.primary);const saved=await saveStore();if(!saved.ok){render();toast("Configurações não confirmadas no servidor. Recarregue o CRM.");return}toast("Configurações salvas");render()};
 }
-function demoData(){if(state.leads.length&& !confirm("Adicionar dados de demonstração aos dados existentes?"))return;["Ana Souza","Mariana Oliveira","Juliana Costa","Carla Mendes","Fernanda Lima","Renata Alves","Patricia Santos","Camila Rocha","Luciana Dias","Beatriz Martins"].forEach((n,i)=>state.leads.push({id:id(),name:n,phone:"1599"+String(620000+i).slice(-6),email:"",service:services[i%services.length],source:sources[i%sources.length],campaign:"Campanha demonstração",status:stages[i%stages.length],temperature:["Frio","Morno","Quente"][i%3],createdAt:new Date(Date.now()-i*86400000).toISOString(),interest:i>1,priceAsked:i>2,requestedTime:i>3,appointment:i>4,attended:i>5,bought:i>7,notes:""}));saveStore();toast("Dados de demonstração carregados");render()}
-async function clearData(){if(!cloudAvailable||cloudWarning){toast("Exclusão bloqueada: o estado da nuvem está indisponível ou não confirmado. Faça backup e tente novamente.");return}if(!confirm("ATENÇÃO: esta ação excluirá leads, follow-ups, vendas e configurações do CRM na NUVEM e neste navegador. Faça um backup antes. Continuar?"))return;if(prompt("Para confirmar a exclusão, digite APAGAR")!=="APAGAR"){toast("Exclusão cancelada.");return}const previous=JSON.parse(JSON.stringify(state));state={id:"state",page:"dashboard",leads:[],tasks:[],sales:[],settings:{studioName:"Studio Pâmela Pastore",primary:"#1A8690"}};await saveStore();if(cloudWarning){state=previous;await saveLocalCache(state);render();toast("Não foi possível confirmar a gravação remota. O estado local anterior foi restaurado; confira o banco e faça backup antes de novas alterações.");return}render();toast("Dados do CRM apagados da nuvem e deste navegador.")}
+async function demoData(){if(state.leads.length&& !confirm("Adicionar dados de demonstração aos dados existentes?"))return;["Ana Souza","Mariana Oliveira","Juliana Costa","Carla Mendes","Fernanda Lima","Renata Alves","Patricia Santos","Camila Rocha","Luciana Dias","Beatriz Martins"].forEach((n,i)=>state.leads.push({id:id(),name:n,phone:"1599"+String(620000+i).slice(-6),email:"",service:services[i%services.length],source:sources[i%sources.length],campaign:"Campanha demonstração",status:stages[i%stages.length],temperature:["Frio","Morno","Quente"][i%3],createdAt:new Date(Date.now()-i*86400000).toISOString(),interest:i>1,priceAsked:i>2,requestedTime:i>3,appointment:i>4,attended:i>5,bought:i>7,notes:""}));const saved=await saveStore();if(!saved.ok){render();toast("Dados de demonstração não confirmados. Recarregue o CRM.");return}toast("Dados de demonstração carregados");render()}
+async function clearData(){if(!cloudAvailable||cloudWarning){toast("Exclusão bloqueada: o estado da nuvem está indisponível ou não confirmado. Faça backup e tente novamente.");return}if(!confirm("ATENÇÃO: esta ação excluirá leads, follow-ups, vendas e configurações do CRM na NUVEM e neste navegador. Faça um backup antes. Continuar?"))return;if(prompt("Para confirmar a exclusão, digite APAGAR")!=="APAGAR"){toast("Exclusão cancelada.");return}state={id:"state",page:"dashboard",leads:[],tasks:[],sales:[],settings:{studioName:"Studio Pâmela Pastore",primary:"#1A8690"}};const saved=await saveStore();if(!saved.ok){render();toast("Não foi possível confirmar a exclusão. Recarregue o CRM e confira o estado remoto antes de tentar novamente.");return}render();toast("Dados do CRM apagados da nuvem e deste navegador.")}
 document.getElementById("logo").src="data:image/jpeg;base64,"+LOGO_B64;
 document.getElementById("nav").addEventListener("click",e=>{const b=e.target.closest("button[data-page]");if(b)setPage(b.dataset.page)});
 document.addEventListener("click",e=>{const b=e.target.closest("[data-crm-action]");if(!b)return;e.preventDefault();const action=b.dataset.crmAction,recordId=b.dataset.recordId;switch(action){case "wa":wa(b.dataset.recordValue);break;case "editLead":editLead(recordId);break;case "moveLead":moveLead(recordId);break;case "deleteLead":deleteLead(recordId);break;case "applyMove":applyMove(recordId);break;case "toggleTask":toggleTask(recordId);break;case "recoverLead":recoverLead(recordId);break;}});
