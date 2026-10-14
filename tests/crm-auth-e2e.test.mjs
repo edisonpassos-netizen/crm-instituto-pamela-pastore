@@ -79,6 +79,16 @@ test('autorização ponta a ponta: cookie forjado não alcança o banco', async 
   });
 });
 
+test('autorização: cookie com percent-encoding inválido é rejeitado sem erro 500', async () => {
+  await withTestEnvironment(async () => {
+    let databaseCalls = 0;
+    globalThis.fetch = async () => { databaseCalls += 1; return Response.json([]); };
+    const response = await handler(req('', { cookie: 'crm_session=%E0%A4%A' }));
+    assert.equal(response.status, 401);
+    assert.equal(databaseCalls, 0);
+  });
+});
+
 test('autorização ponta a ponta: origem divergente é bloqueada', async () => {
   await withTestEnvironment(async () => {
     let databaseCalls = 0;
