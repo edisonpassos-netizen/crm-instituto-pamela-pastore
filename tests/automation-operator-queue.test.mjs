@@ -67,7 +67,7 @@ test('explicit CRM origin allowlist does not implicitly trust production origin'
     SUPABASE_URL: process.env.SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY
   }};
-  const testOrigin = 'https://crm-automacao-teste.netlify.app';
+  const testOrigin = 'https://crm-test.invalid';
   process.env.CRM_ALLOWED_ORIGIN = testOrigin;
   process.env.CRM_SESSION_SECRET = SECRET;
   process.env.SUPABASE_URL = 'https://supabase.test.invalid';
