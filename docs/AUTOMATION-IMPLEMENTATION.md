@@ -1,8 +1,8 @@
 # Implementação gradual das automações
 
-Branch isolada: `feature/automation-engine`.
+Branch de trabalho: `fix/automation-worker-safety`, com proposta de integração em `feature/automation-engine`.
 
-Nenhuma migração foi aplicada ao Supabase de produção. O worker deve permanecer desativado até aprovação explícita e testes simulados com mocks e fixtures sintéticas.
+As migrações-base da fila de automação e de status do provedor já constam no histórico do Supabase de produção. As migrações novas `202610130005_followup_awaiting_operator.sql` e `202610130006_atomic_manual_queue_resolution.sql` ainda não foram aplicadas em produção. O worker deve permanecer desativado até revisão, homologação e aprovação explícita.
 
 ## Etapas
 1. Criar fila persistente com chave de deduplicação e log por tentativa.
@@ -50,7 +50,7 @@ Critérios de avanço: CI verde; nenhum acesso público à fila; taxa de falhas 
 - A interface mantém eventos não aceitos para novas tentativas; a chave única no banco torna o reenvio idempotente.
 - `whatsapp-status-webhook.mjs` valida o desafio GET e a assinatura HMAC SHA-256 de POST antes de atualizar o registro de tentativa associado ao ID da mensagem.
 - Testes de integração usam respostas HTTP simuladas e dados fictícios; nenhum cliente ou API da Meta recebe mensagens.
-- Nova migração proposta `202610120003_whatsapp_status.sql` adiciona status do provedor e metadados de erro. Ela ainda não foi aplicada em qualquer banco.
+- A migração `202610120003_whatsapp_status.sql` adiciona status do provedor e metadados de erro; a funcionalidade correspondente já aparece no histórico de migrações dos ambientes de teste e produção, sob nomes versionados pelo Supabase.
 - A confirmação real de entrega ainda não foi demonstrada. O CI valida o contrato com assinatura/chaves fictícias, não a conexão real com a Meta; qualquer verificação externa depende de autorização específica.
 
 
@@ -60,7 +60,7 @@ Nenhuma chamada real à API da Meta deve ser executada durante esta fase. Usar m
 
 Antes de uma futura validação externa, exigir autorização expressa para o escopo exato, confirmar que o número pertence ao operador e que o modelo está aprovado, validar webhook e assinatura, e documentar o procedimento de pausa e reconciliação. Não usar `crm-automacao-teste`, não criar projeto substituto, não transferir segredos ou dados entre projetos e não configurar variáveis de produção para testes.
 
-**Bloqueio atual:** a conexão real com a Meta não foi comprovada nesta auditoria. Não foram enviados mensagens nem alteradas configurações de Meta, Netlify ou Supabase.
+**Bloqueio atual:** a conexão real com a Meta não foi comprovada nesta auditoria. Não foram enviadas mensagens nem alteradas configurações de Meta ou do Supabase de produção. O ambiente Netlify de testes precisa ter as variáveis secretas de autenticação e a chave de servidor restauradas antes de qualquer homologação funcional.
  
 ## Escopo funcional confirmado após auditoria do CRM
 
