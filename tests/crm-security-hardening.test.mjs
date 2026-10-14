@@ -35,3 +35,38 @@ test('backup restore validates schema and limits file size before replacing stat
   assert.match(fn, /Array\.isArray\(x\.state\.sales\)/);
   assert.match(fn, /x\.state\.settings/);
 });
+
+test('persistence returns explicit outcomes and reconciles ambiguous remote writes', () => {
+  const save = html.match(/async function saveStore\(\)\{[\s\S]*?\n\}\nasync function loadStore\(\)/)?.[0] || '';
+  assert.ok(save, 'saveStore should exist');
+  assert.match(save, /status:"confirmed"/);
+  assert.match(save, /status:"confirmed_reconciled"/);
+  assert.match(save, /status:"conflict"/);
+  assert.match(save, /status:"unknown"/);
+  assert.match(save, /requestCloud\("GET"\)/, 'ambiguous writes should be reconciled by reading remote state');
+  assert.match(save, /await saveLocalCache\(snapshot\)/, 'local cache must update after confirmed remote write');
+  assert.doesNotMatch(save, /catch\(err\)\{\s*cloudWarning=.*?\n\s*\}/s, 'remote errors must not be silently swallowed');
+});
+
+test('lead, sale, import, settings and restore success paths require confirmed persistence', () => {
+  assert.match(html, /if\(!saved\.ok\).*?Lead não salvo no servidor/s);
+  assert.match(html, /if\(!saved\.ok\).*?Venda não confirmada no servidor/s);
+  assert.match(html, /if\(!saved\.ok\).*?Importação não confirmada/s);
+  assert.match(html, /if\(!saved\.ok\).*?Configurações não confirmadas no servidor/s);
+  assert.match(html, /if\(!saved\.ok\)throw new Error\("A gravação remota não foi confirmada:/);
+});
+
+test('recovery does not open WhatsApp before CRM state is confirmed', () => {
+  const fn = html.match(/async function recoverLead\(id0\)\{[^\n]*/)?.[0] || '';
+  assert.ok(fn, 'recoverLead should exist');
+  assert.ok(fn.indexOf('if(!saved.ok)') >= 0);
+  assert.ok(fn.indexOf('if(!saved.ok)') < fn.indexOf('wa(l.phone)'));
+});
+
+test('destructive reset does not claim success when remote outcome is unknown', () => {
+  const fn = html.match(/async function clearData\(\)\{[^\n]*/)?.[0] || '';
+  assert.ok(fn, 'clearData should exist');
+  assert.match(fn, /const saved=await saveStore\(\)/);
+  assert.match(fn, /if\(!saved\.ok\)/);
+  assert.match(fn, /Não foi possível confirmar a exclusão/);
+});
