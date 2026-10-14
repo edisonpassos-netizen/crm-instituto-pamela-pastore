@@ -8,7 +8,7 @@ test('user-controlled IDs and phone numbers are not interpolated into inline Jav
   assert.doesNotMatch(html, /on\w+="[^"]*\$\{[^}]+\}[^"]*"/);
   assert.doesNotMatch(html, /onclick="wa\('\$\{l\.phone\}'\)"/);
   assert.match(html, /data-crm-action="wa"/);
-  assert.match(html, /data-record-value="\$\{esc\(l\.phone\|\|\"\"\)\}"/);
+  assert.match(html, /data-record-value="\$\{esc\(l\.phone\|\|""\)\}"/);
   assert.match(html, /addEventListener\("click",e=>\{const b=e\.target\.closest\("\[data-crm-action\]"\)/);
 });
 
@@ -17,7 +17,7 @@ test('WhatsApp links use noopener and noreferrer', () => {
 });
 
 test('destructive reset is explicit, guarded, and requires a typed confirmation', () => {
-  const fn = html.match(/async function clearData\(\)\{[\s\S]*?\n\}/)?.[0] || '';
+  const fn = html.match(/async function clearData\(\)\{[^\n]*/)?.[0] || '';
   assert.ok(fn, 'clearData function should exist');
   assert.match(fn, /if\(!cloudAvailable\)/);
   assert.match(fn, /digite APAGAR/);
@@ -26,7 +26,7 @@ test('destructive reset is explicit, guarded, and requires a typed confirmation'
 });
 
 test('backup restore validates schema and limits file size before replacing state', () => {
-  const fn = html.match(/async function restore\(\)\{[\s\S]*?\n\}/)?.[0] || '';
+  const fn = html.match(/async function restore\(\)\{[^\n]*/)?.[0] || '';
   assert.ok(fn, 'restore function should exist');
   assert.match(fn, /f\.size>10\*1024\*1024/);
   assert.match(fn, /x\.version!==1/);
