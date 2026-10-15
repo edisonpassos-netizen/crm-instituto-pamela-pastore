@@ -6,6 +6,8 @@ import handler from '../netlify/functions/crm-state.mjs';
 const ORIGIN = 'https://peppy-salamander-2d8776.netlify.app';
 const SECRET = 'test-session-secret-for-operator-queue-123456789';
 const QUEUE_ID = '00000000-0000-4000-8000-000000000001';
+const CRM_DB_URL = 'https://dxfzuxybubvnjertiowf.supabase.co';
+const TEST_SERVER_KEY = 'sb_secret_test-only-not-real';
 
 function sessionCookie() {
   const payload = Buffer.from(JSON.stringify({
@@ -42,8 +44,8 @@ test('operator queue endpoint requires a valid session and returns only awaiting
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     CRM_SESSION_SECRET: process.env.CRM_SESSION_SECRET
   }};
-  process.env.SUPABASE_URL = 'https://supabase.test.invalid';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'server-secret-test-key';
+  process.env.SUPABASE_URL = CRM_DB_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = TEST_SERVER_KEY;
   process.env.CRM_SESSION_SECRET = SECRET;
   let requested = '';
   globalThis.fetch = async url => {
@@ -70,8 +72,8 @@ test('explicit CRM origin allowlist does not implicitly trust production origin'
   const testOrigin = 'https://crm-test.invalid';
   process.env.CRM_ALLOWED_ORIGIN = testOrigin;
   process.env.CRM_SESSION_SECRET = SECRET;
-  process.env.SUPABASE_URL = 'https://supabase.test.invalid';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'server-secret-test-key';
+  process.env.SUPABASE_URL = CRM_DB_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = TEST_SERVER_KEY;
   globalThis.fetch = async () => new Response(JSON.stringify([{ id: QUEUE_ID, status: 'awaiting_operator' }]), { status: 200 });
   try {
     const accepted = await handler(new Request(testOrigin + '/.netlify/functions/crm-state?action=automation-queue', {
@@ -89,10 +91,9 @@ test('manual result only resolves an awaiting job and records a clearly manual a
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     CRM_SESSION_SECRET: process.env.CRM_SESSION_SECRET
   }};
-  process.env.SUPABASE_URL = 'https://supabase.test.invalid';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'server-secret-test-key';
+  process.env.SUPABASE_URL = CRM_DB_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = TEST_SERVER_KEY;
   process.env.CRM_SESSION_SECRET = SECRET;
-  const job = { id: QUEUE_ID, status: 'awaiting_operator', attempts: 1, payload: { dispatch: { state: 'ready_for_manual_contact' } } };
   const requests = [];
   globalThis.fetch = async (url, options = {}) => {
     const record = { url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null };
