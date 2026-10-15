@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { __test } from '../netlify/functions/automation-worker.mjs';
 
+const CRM_TEST_URL = 'https://dxfzuxybubvnjertiowf.supabase.co';
+const CRM_TEST_KEY = 'sb_secret_synthetic';
+
 test('retry delay grows exponentially and is capped', () => {
   assert.equal(__test.retryDelaySeconds(1), 60);
   assert.equal(__test.retryDelaySeconds(2), 120);
@@ -40,8 +43,8 @@ test('unimplemented internal task is not reported as successful', async () => {
   const originalUrl = process.env.SUPABASE_URL;
   const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const calls = [];
-  process.env.SUPABASE_URL = 'https://test-project.supabase.co';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_test_only';
+  process.env.SUPABASE_URL = CRM_TEST_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = CRM_TEST_KEY;
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
     return String(url).includes('crm_automation_attempts')
@@ -76,8 +79,8 @@ test('worker rechecks persisted consent, phone and review URL before send', asyn
   const originalFetch = globalThis.fetch;
   const originalUrl = process.env.SUPABASE_URL;
   const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  process.env.SUPABASE_URL = 'https://test-project.supabase.co';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_test_only';
+  process.env.SUPABASE_URL = CRM_TEST_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = CRM_TEST_KEY;
   const data = {
     attendances: [{ id: 'attendance-42', leadId: 'lead-7', status: 'Concluído', reviewConsent: true, consentAt: '2026-10-12T12:00:00.000Z' }],
     leads: [{ id: 'lead-7', name: 'Maria Silva', phone: '5515999999999' }],
