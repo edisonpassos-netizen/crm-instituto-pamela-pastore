@@ -1,9 +1,10 @@
--- End-to-end database assertions for manual follow-up resolution.
+-- End-to-end database assertions for manual follow-up resolution and WhatsApp inbound persistence.
 -- Runs against an ephemeral PostgreSQL database only.
 begin;
 
 \ir ../../supabase/migrations/202610090001_create_crm_app_state.sql
 \ir ../../supabase/migrations/20261015193500_manual_result_task_sync.sql
+\ir ../../supabase/migrations/202610150004_whatsapp_inbound_messages.sql
 
 do $$
 declare
@@ -158,6 +159,73 @@ begin
   end;
   if not v_bad_date_rejected then
     raise exception 'Past reschedule date was not rejected';
+  end if;
+end $$;
+
+do $$
+declare
+  v_first jsonb;
+  v_duplicate jsonb;
+  v_count integer;
+  v_body text;
+begin
+  if not exists (
+    select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and c.relname='crm_whatsapp_messages' and c.relrowsecurity
+  ) then
+    raise exception 'crm_whatsapp_messages must have RLS enabled';
+  end if;
+
+  if has_table_privilege('anon', 'public.crm_whatsapp_messages', 'SELECT')
+     or has_table_privilege('authenticated', 'public.crm_whatsapp_messages', 'SELECT')
+     or not has_table_privilege('service_role', 'public.crm_whatsapp_messages', 'SELECT') then
+    raise exception 'WhatsApp messages table grants do not follow least privilege';
+  end if;
+
+  if has_function_privilege('anon', 'public.ingest_whatsapp_inbound_message(text,text,text,text,text,text,timestamp with time zone,jsonb)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.ingest_whatsapp_inbound_message(text,text,text,text,text,text,timestamp with time zone,jsonb)', 'EXECUTE')
+     or not has_function_privilege('service_role', 'public.ingest_whatsapp_inbound_message(text,text,text,text,text,text,timestamp with time zone,jsonb)', 'EXECUTE') then
+    raise exception 'Inbound WhatsApp ingest RPC grants do not follow least privilege';
+  end if;
+
+  v_first := public.ingest_whatsapp_inbound_message(
+    'wamid.CI_INBOUND_1',
+    '1234567890',
+    '5515997601234',
+    'Cliente CI',
+    'text',
+    'Mensagem de teste CI',
+    now(),
+    '{"id":"wamid.CI_INBOUND_1","type":"text","text":{"body":"Mensagem de teste CI"}}'::jsonb
+  );
+  if coalesce((v_first->>'inserted')::boolean, false) is not true then
+    raise exception 'First inbound message must be inserted';
+  end if;
+
+  v_duplicate := public.ingest_whatsapp_inbound_message(
+    'wamid.CI_INBOUND_1',
+    '1234567890',
+    '5515997601234',
+    'Cliente CI',
+    'text',
+    'Mensagem duplicada que não deve substituir a original',
+    now(),
+    '{"id":"wamid.CI_INBOUND_1","type":"text"}'::jsonb
+  );
+  if coalesce((v_duplicate->>'inserted')::boolean, true) is not false then
+    raise exception 'Duplicate inbound message must be acknowledged without second insert';
+  end if;
+
+  select count(*), max(text_body)
+  into v_count, v_body
+  from public.crm_whatsapp_messages
+  where provider_message_id='wamid.CI_INBOUND_1';
+
+  if v_count <> 1 then
+    raise exception 'Expected exactly one row for duplicate provider message id, got %', v_count;
+  end if;
+  if v_body <> 'Mensagem de teste CI' then
+    raise exception 'Duplicate webhook unexpectedly overwrote original inbound message';
   end if;
 end $$;
 
