@@ -19,6 +19,27 @@ test('configuration accepts only server credentials for the CRM project',()=>{
   assert.equal(crmDatabaseConfig({SUPABASE_URL:CRM_DATABASE_URL,SUPABASE_SERVICE_ROLE_KEY:jwt({ref:'dxfzuxybubvnjertiowf',role:'service_role'})}).url,CRM_DATABASE_URL);
 });
 
+test('readiness checks the real request path and exposes no customer data',async()=>{
+  const originalUrl=process.env.SUPABASE_URL,originalKey=process.env.SUPABASE_SERVICE_ROLE_KEY,originalFetch=globalThis.fetch;
+  process.env.SUPABASE_URL=CRM_DATABASE_URL;process.env.SUPABASE_SERVICE_ROLE_KEY='sb_secret_synthetic';
+  const request=new Request(origin+'/.netlify/functions/crm-state?action=health');
+  try{
+    globalThis.fetch=async(url,options)=>{
+      assert.equal(String(url),CRM_DATABASE_URL+'/rest/v1/crm_app_state?id=eq.main&select=id');assert.equal(options.method,'GET');
+      return Response.json([{id:'main',data:{private:'must not be returned'}}]);
+    };
+    let response=await handler(request);assert.equal(response.status,200);
+    assert.deepEqual(await response.json(),{ok:true,databaseProjectRef:'dxfzuxybubvnjertiowf'});
+    globalThis.fetch=async()=>Response.json({error:'synthetic unauthorized'},{status:401});
+    response=await handler(request);assert.equal(response.status,503);assert.equal((await response.json()).ok,false);
+    globalThis.fetch=async()=>Response.json([]);response=await handler(request);assert.equal(response.status,503);
+  }finally{
+    globalThis.fetch=originalFetch;
+    if(originalUrl===undefined)delete process.env.SUPABASE_URL;else process.env.SUPABASE_URL=originalUrl;
+    if(originalKey===undefined)delete process.env.SUPABASE_SERVICE_ROLE_KEY;else process.env.SUPABASE_SERVICE_ROLE_KEY=originalKey;
+  }
+});
+
 test('authenticated handler uses only the CRM project and preserves CAS behavior',async()=>{
   const savedEnv={...process.env},savedFetch=globalThis.fetch;
   const calls=[];

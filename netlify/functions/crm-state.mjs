@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { crmDatabaseConfig, CRM_DATABASE_URL } from './lib/crm-database.mjs';
+import { crmDatabaseConfig, CRM_DATABASE_URL, CRM_PROJECT_REF } from './lib/crm-database.mjs';
 
 const DEFAULT_ORIGIN = 'https://peppy-salamander-2d8776.netlify.app';
 const SESSION_COOKIE = 'crm_session';
@@ -134,6 +134,19 @@ export default async (request) => {
   }
 
   if (!allowedOrigin(request)) return json(403, { error: 'Origem não autorizada. Confira a URL configurada em CRM_ALLOWED_ORIGIN.' }, cors);
+
+  // Fixed readiness probe: verifies the real server key without exposing customer data.
+  if (action === 'health' && request.method === 'GET') {
+    try {
+      const rows = await supabaseRequest('GET', '?id=eq.main&select=id');
+      if (!Array.isArray(rows) || rows.length !== 1 || rows[0].id !== 'main') {
+        return json(503, { ok: false, error: 'Estado principal do CRM indisponível.' }, cors);
+      }
+      return json(200, { ok: true, databaseProjectRef: CRM_PROJECT_REF }, cors);
+    } catch {
+      return json(503, { ok: false, error: 'Conexão do CRM indisponível. Confira a URL e a chave secreta do projeto exclusivo.' }, cors);
+    }
+  }
 
   if (action === 'login' && request.method === 'POST') {
     const configuredPassword = process.env.CRM_LOGIN_PASSWORD || '';
