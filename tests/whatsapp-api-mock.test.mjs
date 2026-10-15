@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { __test } from '../netlify/functions/automation-worker.mjs';
 
+const CRM_TEST_URL = 'https://dxfzuxybubvnjertiowf.supabase.co';
+const CRM_TEST_KEY = 'sb_secret_synthetic';
+
 function fakeResponse(status, body) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
 }
@@ -91,8 +94,8 @@ test('ambiguous WhatsApp timeout enters delivery_unknown and is not automaticall
     recipients: process.env.WHATSAPP_TEST_RECIPIENTS,
     fetch: globalThis.fetch
   };
-  process.env.SUPABASE_URL = 'https://supabase.test.invalid';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+  process.env.SUPABASE_URL = CRM_TEST_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = CRM_TEST_KEY;
   process.env.WHATSAPP_ACCESS_TOKEN = 'test-token-not-real';
   process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
   process.env.WHATSAPP_TEMPLATE_NAME = 'test_template';

@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import handler, { __test } from '../netlify/functions/whatsapp-status-webhook.mjs';
 
+const CRM_TEST_URL = 'https://dxfzuxybubvnjertiowf.supabase.co';
+const CRM_TEST_KEY = 'sb_secret_synthetic';
+
 function signed(body, secret) {
   return 'sha256=' + createHmac('sha256', secret).update(body).digest('hex');
 }
@@ -44,8 +47,8 @@ test('signed status webhook updates only mocked provider status rows', async () 
     fetch: globalThis.fetch
   };
   process.env.WHATSAPP_APP_SECRET = 'fixture-app-secret';
-  process.env.SUPABASE_URL = 'https://supabase.test.invalid';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'fake-server-secret-for-tests';
+  process.env.SUPABASE_URL = CRM_TEST_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = CRM_TEST_KEY;
   const body = JSON.stringify({ entry: [{ changes: [{ value: { statuses: [
     { id: 'wamid.TEST_ONLY_1', status: 'delivered', timestamp: '1791633600', recipient_id: '5515000000000' },
     { id: 'wamid.TEST_ONLY_2', status: 'failed', timestamp: '1791633601', errors: [{ code: 131026, title: 'fixture failure' }] }

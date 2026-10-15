@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import handler from '../netlify/functions/crm-state.mjs';
+import { __test as workerTest } from '../netlify/functions/automation-worker.mjs';
+import { __test as webhookTest } from '../netlify/functions/whatsapp-status-webhook.mjs';
 import { crmDatabaseConfig, CRM_DATABASE_URL } from '../netlify/functions/lib/crm-database.mjs';
 
 const origin='https://peppy-salamander-2d8776.netlify.app';
@@ -17,6 +19,22 @@ test('configuration accepts only server credentials for the CRM project',()=>{
   }
   assert.equal(crmDatabaseConfig({SUPABASE_URL:CRM_DATABASE_URL+'/',SUPABASE_SERVICE_ROLE_KEY:'sb_secret_synthetic'}).url,CRM_DATABASE_URL);
   assert.equal(crmDatabaseConfig({SUPABASE_URL:CRM_DATABASE_URL,SUPABASE_SERVICE_ROLE_KEY:jwt({ref:'dxfzuxybubvnjertiowf',role:'service_role'})}).url,CRM_DATABASE_URL);
+});
+
+test('worker and WhatsApp webhook inherit the same exclusive CRM database guard',()=>{
+  const savedUrl=process.env.SUPABASE_URL,savedKey=process.env.SUPABASE_SERVICE_ROLE_KEY;
+  try{
+    process.env.SUPABASE_SERVICE_ROLE_KEY='sb_secret_synthetic';
+    process.env.SUPABASE_URL='https://pposribyzhxyupbxrpfo.supabase.co';
+    assert.throws(()=>workerTest.supabaseConfig(),/exclusivo/);
+    assert.throws(()=>webhookTest.config(),/exclusivo/);
+    process.env.SUPABASE_URL=CRM_DATABASE_URL;
+    assert.equal(workerTest.supabaseConfig().base,CRM_DATABASE_URL);
+    assert.equal(webhookTest.config().url,CRM_DATABASE_URL);
+  }finally{
+    if(savedUrl===undefined)delete process.env.SUPABASE_URL;else process.env.SUPABASE_URL=savedUrl;
+    if(savedKey===undefined)delete process.env.SUPABASE_SERVICE_ROLE_KEY;else process.env.SUPABASE_SERVICE_ROLE_KEY=savedKey;
+  }
 });
 
 test('readiness checks the real request path and exposes no customer data',async()=>{

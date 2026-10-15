@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { __test } from '../netlify/functions/automation-worker.mjs';
 
+const CRM_TEST_URL = 'https://dxfzuxybubvnjertiowf.supabase.co';
+const CRM_TEST_KEY = 'sb_secret_synthetic';
+
 function response(status = 201, body = []) {
   return {
     ok: status >= 200 && status < 300,
@@ -40,8 +43,8 @@ const job = (overrides = {}) => ({
 
 test('follow-up retries transient CRM read failures without claiming dispatch', async () => {
   const previous = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY, fetch: globalThis.fetch };
-  process.env.SUPABASE_URL = 'https://supabase.test.invalid';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+  process.env.SUPABASE_URL = CRM_TEST_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = CRM_TEST_KEY;
   const requests = [];
   let failFirstRead = true;
   setupState({ tasks: [task()], leads: [lead()] }, requests, () => {
@@ -64,8 +67,8 @@ test('follow-up retries transient CRM read failures without claiming dispatch', 
 
 test('future follow-up is rescheduled to its CRM date and does not contact anyone', async () => {
   const previous = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY, fetch: globalThis.fetch };
-  process.env.SUPABASE_URL = 'https://supabase.test.invalid';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+  process.env.SUPABASE_URL = CRM_TEST_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = CRM_TEST_KEY;
   const requests = [];
   setupState({ tasks: [task({ date: '2099-01-15' })], leads: [lead()] }, requests);
   try {
@@ -83,8 +86,8 @@ test('future follow-up is rescheduled to its CRM date and does not contact anyon
 
 test('due follow-up is made available for manual contact, never reported as sent', async () => {
   const previous = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY, fetch: globalThis.fetch };
-  process.env.SUPABASE_URL = 'https://supabase.test.invalid';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+  process.env.SUPABASE_URL = CRM_TEST_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = CRM_TEST_KEY;
   const requests = [];
   setupState({ tasks: [task()], leads: [lead()] }, requests);
   try {
@@ -107,8 +110,8 @@ test('due follow-up is made available for manual contact, never reported as sent
 
 test('completed CRM task is cancelled and not dispatched', async () => {
   const previous = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY, fetch: globalThis.fetch };
-  process.env.SUPABASE_URL = 'https://supabase.test.invalid';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+  process.env.SUPABASE_URL = CRM_TEST_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = CRM_TEST_KEY;
   const requests = [];
   setupState({ tasks: [task({ done: true })], leads: [lead()] }, requests);
   try {
@@ -125,8 +128,8 @@ test('completed CRM task is cancelled and not dispatched', async () => {
 
 test('follow-up is dead-lettered when source task is absent from persisted CRM state', async () => {
   const previous = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY, fetch: globalThis.fetch };
-  process.env.SUPABASE_URL = 'https://supabase.test.invalid';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+  process.env.SUPABASE_URL = CRM_TEST_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = CRM_TEST_KEY;
   const requests = [];
   setupState({ tasks: [], leads: [] }, requests);
   try {
