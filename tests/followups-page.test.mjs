@@ -41,3 +41,11 @@ test('operator page exposes only allowed manual outcomes and escapes rendered da
   assert.match(html, /const esc=/);
   assert.doesNotMatch(html, /value=["']send_whatsapp["']/);
 });
+
+test('rescheduled result requires a new date and refreshes CRM state after completion', () => {
+  assert.match(html, /id="rescheduleDate" type="date"/);
+  assert.match(html, /rescheduleDate:rescheduled\?\$\('rescheduleDate'\)\.value:null/);
+  assert.match(html, /\$\('rescheduleDate'\)\.required=active/);
+  assert.match(html, /Promise\.all\(\[loadCrmState\(\),loadQueue\(\)\]\)/);
+  assert.match(html, /novo follow-up será criado/i);
+});
