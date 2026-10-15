@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { crmDatabaseConfig } from './lib/crm-database.mjs';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
@@ -14,10 +15,7 @@ function verifySignature(rawBody, supplied, appSecret) {
   return equalText(expected, supplied);
 }
 function config() {
-  const base = (process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
-  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-  if (!base || !key || key.startsWith('sb_publishable_')) throw new Error('Webhook server configuration unavailable.');
-  return { base, key };
+  return crmDatabaseConfig(process.env);
 }
 function serverHeaders(key, extra = {}) {
   const headers = { apikey: key, ...extra };
@@ -25,7 +23,7 @@ function serverHeaders(key, extra = {}) {
   return headers;
 }
 async function updateProviderStatus(messageId, status, timestamp, errorInfo = null) {
-  const { base, key } = config();
+  const { url: base, key } = config();
   const query = new URLSearchParams({ provider_message_id: `eq.${messageId}` }).toString();
   const response = await fetch(`${base}/rest/v1/crm_automation_attempts?${query}`, {
     method: 'PATCH',
@@ -86,4 +84,4 @@ export default async request => {
   }
 };
 
-export const __test = { verifySignature, updateProviderStatus, serverHeaders };
+export const __test = { verifySignature, updateProviderStatus, serverHeaders, config };
