@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 const html = await readFile(new URL('../followups-operacionais.html', import.meta.url), 'utf8');
 const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/i);
 
- test('operator follow-up page has valid inline JavaScript syntax', () => {
+test('operator follow-up page has valid inline JavaScript syntax', () => {
   assert.ok(scriptMatch, 'inline script must exist');
   assert.doesNotThrow(() => new Function(scriptMatch[1]));
 });
@@ -17,6 +17,15 @@ test('operator follow-up page uses authenticated CRM API only', () => {
   assert.match(html, /credentials:'same-origin'/);
   assert.doesNotMatch(html, /supabase\.co/i);
   assert.doesNotMatch(html, /SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test('operator page creates explicit follow-up event together with CRM task', () => {
+  assert.match(html, /lead_follow_up_requested/);
+  assert.match(html, /automationEvents:\[\{clientEventId/);
+  assert.match(html, /sourceType:'task'/);
+  assert.match(html, /sourceId:task\.id/);
+  assert.match(html, /revision/);
+  assert.match(html, /acceptedEventIds/);
 });
 
 test('operator follow-up page contains no outbound WhatsApp or Meta call', () => {
