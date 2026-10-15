@@ -7,11 +7,16 @@ function config() {
   return { base, key };
 }
 
+function serverHeaders(key, extra = {}) {
+  const headers = { apikey: key, ...extra };
+  if (!key.startsWith('sb_secret_')) headers.Authorization = `Bearer ${key}`;
+  return headers;
+}
 
 async function persistedCrmState(base, key) {
   const response = await fetch(`${base}/rest/v1/crm_app_state?id=eq.main&select=data`, {
     method: 'GET',
-    headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+    headers: serverHeaders(key, { Accept: 'application/json' })
   });
   if (!response.ok) throw new Error(`Could not verify persisted CRM state (HTTP ${response.status}).`);
   const rows = await response.json();
@@ -83,12 +88,10 @@ export async function enqueueAutomationEvents(events = []) {
       }
       const response = await fetch(`${base}/rest/v1/rpc/enqueue_crm_automation`, {
         method: 'POST',
-        headers: {
-          apikey: key,
-          Authorization: `Bearer ${key}`,
+        headers: serverHeaders(key, {
           'Content-Type': 'application/json',
           Accept: 'application/json'
-        },
+        }),
         body: JSON.stringify({
           p_dedupe_key: command.dedupe_key,
           p_event_type: command.event_type,
@@ -111,4 +114,4 @@ export async function enqueueAutomationEvents(events = []) {
   return { acceptedEventIds, failures };
 }
 
-export const __test = { config };
+export const __test = { config, serverHeaders };
