@@ -29,3 +29,13 @@ A raiz do site é o diretório do projeto; a função deve ser publicada a parti
 - Confirmar que o deploy publica a função.
 - Testar login, leitura, gravação, edição e persistência após recarregar.
 - Tornar o repositório privado, pois contém código proprietário do CRM.
+
+## Banco exclusivo do CRM
+
+Este CRM deve usar somente o projeto `crm-automation-test` (`dxfzuxybubvnjertiowf`), com `SUPABASE_URL=https://dxfzuxybubvnjertiowf.supabase.co` e uma chave de servidor desse mesmo projeto. A API rejeita URLs diferentes antes de enviar qualquer chamada ao banco. A Agenda Pilates permanece no projeto `studio-pamela-aluno`.
+
+A variável `SUPABASE_SERVICE_ROLE_KEY` aceita uma chave moderna `sb_secret_` ou uma chave legada `service_role` do projeto do CRM. Chaves modernas são enviadas apenas no cabeçalho `apikey`; chaves legadas também usam `Authorization`. Nenhuma chave real deve ser incluída em arquivos de teste ou commits.
+
+Execute `node --test tests/*.test.mjs` para conferir o destino, a rejeição de chaves de outro projeto, a autenticação e a proteção contra revisão desatualizada. Os testes HTTP usam respostas simuladas.
+
+A troca em produção exige configurar a chave secreta do destino no Netlify, conferir a revisão final dos dados, atualizar a URL e publicar este código. Só depois de validar leitura e gravação no banco novo deve-se revogar a chave antiga usada pelo CRM no projeto da Agenda. Não revogue credenciais compartilhadas sem identificar seus outros consumidores.
