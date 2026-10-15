@@ -44,7 +44,7 @@ A preparação de homologação mantém envios reais bloqueados e usa configura�
 
 Durante a homologação, `AUTOMATIONS_ENABLED=false` e `WHATSAPP_TEST_MODE=false` permanecem obrigatórios até que credenciais, webhook, número de teste e allowlist tenham sido validados separadamente. O webhook POST deve rejeitar payloads sem assinatura válida, e o worker nunca deve enviar para um destinatário fora de `WHATSAPP_TEST_RECIPIENTS`.
 
-A configuração de homologação deve ser republicada após qualquer alteração de variável para garantir que o runtime das Functions receba os valores novos.
+A configuração de homologação deve ser republicada após qualquer alteração de variável para garantir que o runtime das Functions receba os valores novos. Após configurar `WHATSAPP_ACCESS_TOKEN` ou `WHATSAPP_APP_SECRET`, confirme sempre um deploy posterior à alteração antes de testar o webhook.
 
 ## Autenticação
 A função exige uma sessão assinada, armazenada em cookie `HttpOnly; Secure; SameSite=Strict` com validade de 8 horas. A origem/CORS é uma camada adicional e não substitui autenticação.
