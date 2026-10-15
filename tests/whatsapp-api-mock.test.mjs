@@ -15,6 +15,7 @@ test('WhatsApp success response returns provider message id using mocked fetch o
     phone: process.env.WHATSAPP_PHONE_NUMBER_ID,
     template: process.env.WHATSAPP_TEMPLATE_NAME,
     language: process.env.WHATSAPP_TEMPLATE_LANGUAGE,
+    version: process.env.WHATSAPP_GRAPH_API_VERSION,
     testMode: process.env.WHATSAPP_TEST_MODE,
     recipients: process.env.WHATSAPP_TEST_RECIPIENTS,
     fetch: globalThis.fetch
@@ -24,6 +25,7 @@ test('WhatsApp success response returns provider message id using mocked fetch o
     WHATSAPP_PHONE_NUMBER_ID: '123456789',
     WHATSAPP_TEMPLATE_NAME: 'test_template',
     WHATSAPP_TEMPLATE_LANGUAGE: 'pt_BR',
+    WHATSAPP_GRAPH_API_VERSION: 'v26.0',
     WHATSAPP_TEST_MODE: 'true',
     WHATSAPP_TEST_RECIPIENTS: '5515999999999'
   });
@@ -35,7 +37,7 @@ test('WhatsApp success response returns provider message id using mocked fetch o
   try {
     const id = await __test.sendWhatsAppTemplate({ recipient_phone: '+55 (15) 99999-9999', payload: {} });
     assert.equal(id, 'wamid.TEST_ONLY_123');
-    assert.match(captured.url, /^https:\/\/graph\.facebook\.com\/v23\.0\/123456789\/messages$/);
+    assert.match(captured.url, /^https:\/\/graph\.facebook\.com\/v26\.0\/123456789\/messages$/);
     assert.equal(JSON.parse(captured.options.body).to, '5515999999999');
     assert.equal(JSON.parse(captured.options.body).template.name, 'test_template');
   } finally {
@@ -45,6 +47,7 @@ test('WhatsApp success response returns provider message id using mocked fetch o
       WHATSAPP_PHONE_NUMBER_ID: previous.phone,
       WHATSAPP_TEMPLATE_NAME: previous.template,
       WHATSAPP_TEMPLATE_LANGUAGE: previous.language,
+      WHATSAPP_GRAPH_API_VERSION: previous.version,
       WHATSAPP_TEST_MODE: previous.testMode,
       WHATSAPP_TEST_RECIPIENTS: previous.recipients
     })) {
