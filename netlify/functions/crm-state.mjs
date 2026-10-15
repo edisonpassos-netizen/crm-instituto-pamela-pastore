@@ -219,23 +219,37 @@ export default async request => {
     const id = String(body?.id || '').trim();
     const outcome = String(body?.outcome || '').trim();
     const note = String(body?.note || '').trim().slice(0, 500);
+    const rescheduleDate = String(body?.rescheduleDate || '').trim();
     const allowedOutcomes = new Set(['contacted', 'no_answer', 'rescheduled', 'not_contacted']);
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) || !allowedOutcomes.has(outcome)) {
       return json(400, { error: 'Identificador ou resultado inválido.' }, cors);
     }
+    if (outcome === 'rescheduled') {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(rescheduleDate) || !Number.isFinite(Date.parse(rescheduleDate + 'T12:00:00.000Z'))) {
+        return json(400, { error: 'Informe uma nova data válida para o retorno.' }, cors);
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      if (rescheduleDate < today) return json(400, { error: 'A nova data do retorno não pode estar no passado.' }, cors);
+    }
     try {
-      const result = await supabaseAutomationRequest('rpc/resolve_automation_queue_manual_result', 'POST', {
+      const result = await supabaseAutomationRequest('rpc/resolve_automation_queue_manual_result_v2', 'POST', {
         p_queue_id: id,
         p_outcome: outcome,
         p_note: note,
-        p_resolved_by: 'crm_operator'
+        p_resolved_by: 'crm_operator',
+        p_reschedule_date: outcome === 'rescheduled' ? rescheduleDate : null
       });
-      if (result?.conflict) return json(409, { error: 'A tarefa não está mais aguardando ação manual. Atualize a fila.' }, cors);
+      if (result?.conflict) return json(409, { error: 'A tarefa ou fila mudou desde a última atualização. Atualize a fila e tente novamente.' }, cors);
       return json(200, {
         ok: true,
         item: result?.item || result,
         outcome,
-        message: 'Resultado manual registrado. Nenhuma mensagem foi enviada pelo sistema.'
+        appRevision: Number(result?.appRevision || 0) || null,
+        rescheduledTaskId: result?.rescheduledTaskId || null,
+        rescheduleDate: result?.rescheduleDate || null,
+        message: outcome === 'rescheduled'
+          ? 'Resultado registrado e novo follow-up criado para a data escolhida. Nenhuma mensagem foi enviada.'
+          : 'Resultado manual registrado e tarefa concluída no CRM. Nenhuma mensagem foi enviada pelo sistema.'
       }, cors);
     } catch (error) {
       return json(error?.status || 500, { error: error?.message || 'Não foi possível registrar o resultado.' }, cors);
