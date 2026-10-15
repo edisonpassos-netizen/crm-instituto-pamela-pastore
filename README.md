@@ -21,9 +21,12 @@ Não use o mesmo valor para a senha e o segredo de sessão. Configure todos os v
 
 ## Travas de automação
 
-Em produção, mantenha explicitamente:
-- `AUTOMATIONS_ENABLED=false` — o worker não processa a fila enquanto não houver ativação operacional deliberada.
+Em produção, durante a fase de follow-up manual, mantenha explicitamente:
+- `INTERNAL_AUTOMATIONS_ENABLED=true` — autoriza apenas o processamento interno necessário para transformar follow-ups validados em itens `awaiting_operator`.
+- `AUTOMATIONS_ENABLED=false` — mantém bloqueados os canais externos e impede que o worker reivindique filas de WhatsApp ou Google Review.
 - `WHATSAPP_TEST_MODE=false` — impede qualquer envio pela integração de WhatsApp.
+
+Quando somente `INTERNAL_AUTOMATIONS_ENABLED=true`, o worker usa exclusivamente `claim_due_internal_automation_jobs`, RPC que filtra `channel='internal'` e não reivindica canais externos. O RPC é restrito a `service_role`.
 
 Mesmo quando `AUTOMATIONS_ENABLED=true` for autorizado no futuro, o envio de WhatsApp continua exigindo separadamente `WHATSAPP_TEST_MODE=true`, credenciais válidas e destinatário presente na allowlist de teste. A ausência dessas condições deve falhar de forma fechada.
 
