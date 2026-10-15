@@ -13,17 +13,21 @@ function supabaseConfig() {
   return { base, key };
 }
 
+function serverHeaders(key, extra = {}) {
+  const headers = { apikey: key, ...extra };
+  if (!key.startsWith('sb_secret_')) headers.Authorization = `Bearer ${key}`;
+  return headers;
+}
+
 async function dbRequest(path, method = 'POST', body = {}) {
   const { base, key } = supabaseConfig();
   const response = await fetch(`${base}/rest/v1/${path}`, {
     method,
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
+    headers: serverHeaders(key, {
       'Content-Type': 'application/json',
       Accept: 'application/json',
       Prefer: 'return=representation'
-    },
+    }),
     body: method === 'GET' ? undefined : JSON.stringify(body)
   });
   const text = await response.text();
@@ -161,10 +165,9 @@ async function updateJob(job, patch) {
   const { base, key } = supabaseConfig();
   const response = await fetch(`${base}/rest/v1/crm_automation_queue?id=eq.${encodeURIComponent(job.id)}`, {
     method: 'PATCH',
-    headers: {
-      apikey: key, Authorization: `Bearer ${key}`,
+    headers: serverHeaders(key, {
       'Content-Type': 'application/json', Prefer: 'return=minimal'
-    },
+    }),
     body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() })
   });
   if (!response.ok) throw new Error(`Falha ao atualizar fila (HTTP ${response.status}).`);
@@ -339,4 +342,4 @@ export default async () => {
   }
 };
 
-export const __test = { retryDelaySeconds, isReviewEligible, reviewMessage, verifyReviewAgainstStoredState, processJob, sendWhatsAppTemplate };
+export const __test = { retryDelaySeconds, isReviewEligible, reviewMessage, verifyReviewAgainstStoredState, processJob, sendWhatsAppTemplate, serverHeaders };
