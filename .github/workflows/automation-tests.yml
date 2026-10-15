@@ -8,6 +8,9 @@ permissions:
 jobs:
   unit:
     runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: https://dxfzuxybubvnjertiowf.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: sb_secret_synthetic
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
