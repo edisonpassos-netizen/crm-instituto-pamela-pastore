@@ -88,11 +88,16 @@ function clearSessionCookie() {
   return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
 }
 
+function serverHeaders(key) {
+  const headers = { apikey: key, Accept: 'application/json' };
+  if (!key.startsWith('sb_secret_')) headers.Authorization = `Bearer ${key}`;
+  return headers;
+}
+
 async function supabaseRequest(method, query = '', body = null) {
   const url = TABLE_URL() + query;
   const { url: supabaseUrl, key } = crmDatabaseConfig(process.env);
-  const headers = { apikey: key, Accept: 'application/json' };
-  if (!key.startsWith('sb_secret_')) headers.Authorization = `Bearer ${key}`;
+  const headers = serverHeaders(key);
   const options = { method, headers };
   if (body !== null) {
     headers['Content-Type'] = 'application/json';
@@ -117,6 +122,27 @@ async function supabaseRequest(method, query = '', body = null) {
       ? 'Supabase recusou a chave configurada no servidor (HTTP 401). Confira se SUPABASE_SERVICE_ROLE_KEY é a chave secreta do mesmo projeto indicado em SUPABASE_URL.'
       : `Supabase respondeu HTTP ${response.status}.`;
     const err = new Error(detail);
+    err.status = response.status;
+    throw err;
+  }
+  return parsed;
+}
+
+async function supabaseAutomationRequest(path, method = 'GET', body = null) {
+  const { url: base, key } = crmDatabaseConfig(process.env);
+  const headers = serverHeaders(key);
+  const options = { method, headers };
+  if (body !== null) {
+    headers['Content-Type'] = 'application/json';
+    headers.Prefer = 'return=representation';
+    options.body = JSON.stringify(body);
+  }
+  const response = await fetch(`${base}/rest/v1/${path}`, options);
+  const raw = await response.text();
+  let parsed = null;
+  try { parsed = raw ? JSON.parse(raw) : null; } catch {}
+  if (!response.ok) {
+    const err = new Error(`Supabase respondeu HTTP ${response.status} ao acessar a automação.`);
     err.status = response.status;
     throw err;
   }
@@ -178,6 +204,48 @@ export default async (request) => {
     return validSession(request)
       ? json(200, { authenticated: true }, cors)
       : json(401, { authenticated: false }, cors);
+  }
+
+  if (action === 'automation-queue' && request.method === 'GET') {
+    if (!validSession(request)) return json(401, { error: 'Sessão expirada ou não autenticada.' }, cors);
+    try {
+      const rows = await supabaseAutomationRequest(
+        'crm_automation_queue?status=eq.awaiting_operator&select=id,event_type,source_type,source_id,payload,scheduled_at,created_at,attempts&order=scheduled_at.asc&limit=100'
+      );
+      return json(200, { items: Array.isArray(rows) ? rows : [] }, cors);
+    } catch (error) {
+      return json(error?.status || 500, { error: error?.message || 'Não foi possível consultar a fila.' }, cors);
+    }
+  }
+
+  if (action === 'automation-queue-result' && request.method === 'POST') {
+    if (!validSession(request)) return json(401, { error: 'Sessão expirada ou não autenticada.' }, cors);
+    let body;
+    try { body = await request.json(); } catch { return json(400, { error: 'Corpo JSON inválido.' }, cors); }
+    const id = String(body?.id || '').trim();
+    const outcome = String(body?.outcome || '').trim();
+    const note = String(body?.note || '').trim().slice(0, 500);
+    const allowedOutcomes = new Set(['contacted', 'no_answer', 'rescheduled', 'not_contacted']);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) || !allowedOutcomes.has(outcome)) {
+      return json(400, { error: 'Identificador ou resultado inválido.' }, cors);
+    }
+    try {
+      const result = await supabaseAutomationRequest('rpc/resolve_automation_queue_manual_result', 'POST', {
+        p_queue_id: id,
+        p_outcome: outcome,
+        p_note: note,
+        p_resolved_by: 'crm_operator'
+      });
+      if (result?.conflict) return json(409, { error: 'A tarefa não está mais aguardando ação manual. Atualize a fila.' }, cors);
+      return json(200, {
+        ok: true,
+        item: result?.item || result,
+        outcome,
+        message: 'Resultado manual registrado. Nenhuma mensagem foi enviada pelo sistema.'
+      }, cors);
+    } catch (error) {
+      return json(error?.status || 500, { error: error?.message || 'Não foi possível registrar o resultado.' }, cors);
+    }
   }
 
   if (!['GET', 'PUT'].includes(request.method)) {
