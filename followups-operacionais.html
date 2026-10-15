@@ -6,11 +6,11 @@
 <title>Fila Operacional — Instituto Pâmela Pastore</title>
 <style>
 :root{--primary:#1A8690;--primary-dark:#126B73;--bg:#f4f7f7;--surface:#fff;--line:#dfe7e8;--text:#263238;--muted:#68777a;--danger:#c94b4b;--success:#2e8b57;--shadow:0 8px 28px rgba(25,65,70,.08)}
-*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}button,input,select,textarea{font:inherit}.top{background:var(--primary);color:#fff;padding:18px 22px}.top h1{margin:0;font-size:20px}.top p{margin:5px 0 0;opacity:.9}.wrap{max-width:1200px;margin:auto;padding:20px}.card{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:9px 12px;border-radius:9px;font-weight:650;cursor:pointer}.btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}.btn.primary:hover{background:var(--primary-dark)}.btn:disabled{opacity:.55;cursor:not-allowed}.muted{color:var(--muted)}.status{display:inline-flex;padding:6px 10px;border-radius:20px;font-size:12px;font-weight:700;background:#eef8f2;color:var(--success)}.error{color:var(--danger)}.empty{padding:28px;text-align:center;color:var(--muted)}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{color:var(--muted);font-size:11px;text-transform:uppercase}input,select,textarea{width:100%;border:1px solid #cfdadb;border-radius:8px;padding:9px;background:#fff;color:var(--text)}label{font-size:12px;font-weight:700;color:#536164;display:block;margin-bottom:5px}.modal-back{position:fixed;inset:0;background:rgba(16,40,42,.45);display:none;align-items:center;justify-content:center;padding:20px}.modal{background:#fff;border-radius:14px;width:min(560px,100%);padding:20px}.grid{display:grid;gap:12px}.auth{max-width:430px;margin:50px auto}.auth form{display:grid;gap:12px}.hidden{display:none!important}@media(max-width:700px){.wrap{padding:12px}th,td{white-space:normal;min-width:120px}}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}button,input,select,textarea{font:inherit}.top{background:var(--primary);color:#fff;padding:18px 22px}.top h1{margin:0;font-size:20px}.top p{margin:5px 0 0;opacity:.9}.wrap{max-width:1200px;margin:auto;padding:20px}.card{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:9px 12px;border-radius:9px;font-weight:650;cursor:pointer}.btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}.btn.primary:hover{background:var(--primary-dark)}.btn:disabled{opacity:.55;cursor:not-allowed}.muted{color:var(--muted)}.status{display:inline-flex;padding:6px 10px;border-radius:20px;font-size:12px;font-weight:700;background:#eef8f2;color:var(--success)}.error{color:var(--danger)}.empty{padding:28px;text-align:center;color:var(--muted)}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{color:var(--muted);font-size:11px;text-transform:uppercase}input,select,textarea{width:100%;border:1px solid #cfdadb;border-radius:8px;padding:9px;background:#fff;color:var(--text)}label{font-size:12px;font-weight:700;color:#536164;display:block;margin-bottom:5px}.modal-back{position:fixed;inset:0;background:rgba(16,40,42,.45);display:none;align-items:center;justify-content:center;padding:20px}.modal{background:#fff;border-radius:14px;width:min(560px,100%);padding:20px}.grid{display:grid;gap:12px}.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.full{grid-column:1/-1}.auth{max-width:430px;margin:50px auto}.auth form{display:grid;gap:12px}.hidden{display:none!important}@media(max-width:700px){.wrap{padding:12px}th,td{white-space:normal;min-width:120px}.form-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<header class="top"><h1>Fila Operacional de Follow-ups</h1><p>Instituto Pâmela Pastore • contato manual e auditável</p></header>
+<header class="top"><h1>Fila Operacional de Follow-ups</h1><p>Instituto Pâmela Pastore • criação, contato manual e auditoria</p></header>
 <main class="wrap">
   <section id="authCard" class="card auth hidden">
     <h2>Acesso ao CRM</h2>
@@ -29,8 +29,20 @@
         <a class="btn" href="/">Voltar ao CRM</a>
         <span id="status" class="status">Conectado</span>
       </div>
-      <p class="muted">Somente tarefas validadas com status <b>awaiting_operator</b> aparecem aqui. Registrar resultado não envia WhatsApp.</p>
+      <p class="muted">Somente tarefas validadas com status <b>awaiting_operator</b> aparecem na fila. Nenhum contato é enviado automaticamente por esta página.</p>
     </div>
+
+    <div class="card">
+      <h2>Novo follow-up</h2>
+      <form id="createForm" class="form-grid">
+        <div><label for="leadId">Lead</label><select id="leadId" required></select></div>
+        <div><label for="taskDate">Data</label><input id="taskDate" type="date" required></div>
+        <div><label for="taskType">Tipo</label><select id="taskType"><option>WhatsApp</option><option>Ligação</option><option>Retorno</option><option>Reativação</option><option>Outro</option></select></div>
+        <div class="full"><label for="taskNote">Observação</label><textarea id="taskNote" rows="3" maxlength="500"></textarea></div>
+        <div class="full toolbar"><button id="createTask" class="btn primary" type="submit">Criar follow-up</button><span id="createMessage" class="muted"></span></div>
+      </form>
+    </div>
+
     <div class="card">
       <div id="queue"><div class="empty">Carregando fila…</div></div>
     </div>
@@ -43,19 +55,44 @@
 'use strict';
 const API='/.netlify/functions/crm-state';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let items=[];
 const $=id=>document.getElementById(id);
+let items=[];
+let crmState=null;
+let revision=null;
 
-async function api(action, options={}){
-  const response=await fetch(`${API}?action=${encodeURIComponent(action)}`,{credentials:'same-origin',...options,headers:{Accept:'application/json',...(options.headers||{})}});
+async function request(url, options={}){
+  const response=await fetch(url,{credentials:'same-origin',...options,headers:{Accept:'application/json',...(options.headers||{})}});
   const data=await response.json().catch(()=>({}));
   if(!response.ok){const error=new Error(data.error||`Erro HTTP ${response.status}`);error.status=response.status;throw error}
   return data;
 }
+async function api(action,options={}){return request(`${API}?action=${encodeURIComponent(action)}`,options)}
+async function crm(method='GET',body=null){return request(API,{method,headers:body?{'Content-Type':'application/json'}:{},...(body?{body:JSON.stringify(body)}:{})})}
+
+function today(){return new Date().toISOString().slice(0,10)}
+function newId(){return crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(16).slice(2)}`}
+
+async function loadCrmState(){
+  const data=await crm('GET');
+  crmState=data.data&&typeof data.data==='object'?data.data:{};
+  revision=Number(data.revision);
+  if(!Array.isArray(crmState.leads))crmState.leads=[];
+  if(!Array.isArray(crmState.tasks))crmState.tasks=[];
+  $('leadId').innerHTML=crmState.leads.map(lead=>`<option value="${esc(lead.id)}">${esc(lead.name||'Sem nome')} • ${esc(lead.phone||'sem telefone')}</option>`).join('');
+  $('createTask').disabled=!crmState.leads.length;
+  if(!crmState.leads.length)$('createMessage').textContent='Cadastre um lead no CRM antes de criar follow-up.';
+}
 
 async function boot(){
-  try{await api('session');$('authCard').classList.add('hidden');$('app').classList.remove('hidden');await loadQueue()}
-  catch(error){$('app').classList.add('hidden');$('authCard').classList.remove('hidden');if(error.status!==401&&error.status!==403)$('loginError').textContent=error.message}
+  try{
+    await api('session');
+    $('authCard').classList.add('hidden');$('app').classList.remove('hidden');
+    $('taskDate').value=today();
+    await Promise.all([loadCrmState(),loadQueue()]);
+  }catch(error){
+    $('app').classList.add('hidden');$('authCard').classList.remove('hidden');
+    if(error.status!==401&&error.status!==403)$('loginError').textContent=error.message;
+  }
 }
 
 $('loginForm').addEventListener('submit',async event=>{
@@ -65,8 +102,32 @@ $('loginForm').addEventListener('submit',async event=>{
   finally{button.disabled=false}
 });
 
+$('createForm').addEventListener('submit',async event=>{
+  event.preventDefault();
+  const button=$('createTask');button.disabled=true;$('createMessage').textContent='Salvando…';
+  try{
+    await loadCrmState();
+    const lead=crmState.leads.find(item=>String(item.id)===String($('leadId').value));
+    if(!lead)throw new Error('Lead não encontrado. Atualize a página e tente novamente.');
+    const task={id:newId(),leadId:lead.id,date:$('taskDate').value,type:$('taskType').value,note:$('taskNote').value.trim(),done:false};
+    const nextState=structuredClone(crmState);nextState.tasks.push(task);
+    const clientEventId=task.id;
+    const result=await crm('PUT',{data:nextState,revision,automationEvents:[{clientEventId,type:'lead_follow_up_requested',sourceType:'task',sourceId:task.id,occurredAt:new Date().toISOString()}]});
+    const accepted=new Set(result.automation?.acceptedEventIds||[]);
+    if(!accepted.has(clientEventId)){
+      const failure=result.automation?.failures?.find(item=>item.clientEventId===clientEventId);
+      throw new Error(failure?.message||'Follow-up salvo no CRM, mas ainda não entrou na fila de automação.');
+    }
+    crmState=nextState;revision=Number(result.revision);$('taskNote').value='';$('createMessage').textContent='Follow-up criado e enfileirado com sucesso.';
+    await loadQueue();
+  }catch(error){
+    $('createMessage').textContent=error.status===409?'O CRM mudou em outra sessão. Dados recarregados; envie novamente.':error.message;
+    try{await loadCrmState()}catch{}
+  }finally{button.disabled=!crmState?.leads?.length}
+});
+
 async function loadQueue(){
-  $('queue').innerHTML='<div class="empty">Atualizando fila…</div>'; $('status').textContent='Conectado';
+  $('queue').innerHTML='<div class="empty">Atualizando fila…</div>';$('status').textContent='Conectado';
   try{
     const data=await api('automation-queue');items=Array.isArray(data.items)?data.items:[];
     if(!items.length){$('queue').innerHTML='<div class="empty">Nenhuma tarefa aguardando ação manual.</div>';return}
@@ -82,7 +143,7 @@ function openResult(id){
 function closeResult(){$('modalBack').style.display='none'}
 $('cancelResult').addEventListener('click',closeResult);
 $('modalBack').addEventListener('click',event=>{if(event.target===$('modalBack'))closeResult()});
-$('refresh').addEventListener('click',loadQueue);
+$('refresh').addEventListener('click',async()=>{await Promise.all([loadCrmState(),loadQueue()])});
 $('resultForm').addEventListener('submit',async event=>{
   event.preventDefault();const button=$('saveResult');button.disabled=true;
   try{await api('automation-queue-result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:$('queueId').value,outcome:$('outcome').value,note:$('note').value})});closeResult();await loadQueue()}
