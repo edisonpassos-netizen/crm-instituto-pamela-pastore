@@ -85,7 +85,7 @@ test('explicit CRM origin allowlist does not implicitly trust production origin'
   } finally { restore(previous); }
 });
 
-test('manual result only resolves an awaiting job and records a clearly manual audit event', async () => {
+test('manual result calls atomic v2 RPC and never sends externally', async () => {
   const previous = { fetch: globalThis.fetch, env: {
     SUPABASE_URL: process.env.SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -98,8 +98,8 @@ test('manual result only resolves an awaiting job and records a clearly manual a
   globalThis.fetch = async (url, options = {}) => {
     const record = { url: String(url), method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null };
     requests.push(record);
-    if (record.url.includes('/rpc/resolve_automation_queue_manual_result') && record.method === 'POST') {
-      return new Response(JSON.stringify({ conflict: false, item: { id: QUEUE_ID, status: 'completed' } }), { status: 200 });
+    if (record.url.includes('/rpc/resolve_automation_queue_manual_result_v2') && record.method === 'POST') {
+      return new Response(JSON.stringify({ conflict: false, item: { id: QUEUE_ID, status: 'completed' }, appRevision: 9 }), { status: 200 });
     }
     return new Response('unexpected request', { status: 500 });
   };
@@ -108,15 +108,61 @@ test('manual result only resolves an awaiting job and records a clearly manual a
       id: QUEUE_ID, outcome: 'contacted', note: 'Contato telefônico realizado.'
     }));
     assert.equal(response.status, 200);
-    assert.match((await response.json()).message, /Nenhuma mensagem foi enviada/);
-    const rpc = requests.find(r => r.url.includes('/rpc/resolve_automation_queue_manual_result'));
+    const payload = await response.json();
+    assert.match(payload.message, /tarefa concluída/i);
+    assert.match(payload.message, /Nenhuma mensagem foi enviada/);
+    assert.equal(payload.appRevision, 9);
+    const rpc = requests.find(r => r.url.includes('/rpc/resolve_automation_queue_manual_result_v2'));
     assert.equal(rpc.method, 'POST');
     assert.equal(rpc.body.p_queue_id, QUEUE_ID);
     assert.equal(rpc.body.p_outcome, 'contacted');
     assert.equal(rpc.body.p_note, 'Contato telefônico realizado.');
+    assert.equal(rpc.body.p_reschedule_date, null);
     assert.equal(requests.some(r => r.method === 'PATCH'), false);
     assert.equal(requests.some(r => r.url.includes('/crm_automation_attempts')), false);
     assert.equal(requests.some(r => r.url.includes('graph.facebook.com')), false);
+  } finally { restore(previous); }
+});
+
+test('rescheduled result requires a valid future date and forwards it to the atomic RPC', async () => {
+  const previous = { fetch: globalThis.fetch, env: {
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    CRM_SESSION_SECRET: process.env.CRM_SESSION_SECRET
+  }};
+  process.env.SUPABASE_URL = CRM_DB_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = TEST_SERVER_KEY;
+  process.env.CRM_SESSION_SECRET = SECRET;
+  let calls = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    calls++;
+    const body = options.body ? JSON.parse(options.body) : null;
+    assert.match(String(url), /resolve_automation_queue_manual_result_v2/);
+    assert.equal(body.p_outcome, 'rescheduled');
+    assert.equal(body.p_reschedule_date, '2099-12-31');
+    return new Response(JSON.stringify({
+      conflict: false,
+      item: { id: QUEUE_ID, status: 'completed' },
+      appRevision: 10,
+      rescheduledTaskId: '22222222-2222-4222-8222-222222222222',
+      rescheduleDate: '2099-12-31'
+    }), { status: 200 });
+  };
+  try {
+    const missing = await handler(request(ORIGIN + '/.netlify/functions/crm-state?action=automation-queue-result', 'POST', {
+      id: QUEUE_ID, outcome: 'rescheduled', note: 'Retornar depois.'
+    }));
+    assert.equal(missing.status, 400);
+    assert.equal(calls, 0);
+
+    const response = await handler(request(ORIGIN + '/.netlify/functions/crm-state?action=automation-queue-result', 'POST', {
+      id: QUEUE_ID, outcome: 'rescheduled', note: 'Retornar depois.', rescheduleDate: '2099-12-31'
+    }));
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.rescheduleDate, '2099-12-31');
+    assert.match(payload.message, /novo follow-up criado/i);
+    assert.equal(calls, 1);
   } finally { restore(previous); }
 });
 
