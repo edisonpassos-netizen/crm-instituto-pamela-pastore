@@ -19,15 +19,19 @@ function config() {
   if (!base || !key || key.startsWith('sb_publishable_')) throw new Error('Webhook server configuration unavailable.');
   return { base, key };
 }
+function serverHeaders(key, extra = {}) {
+  const headers = { apikey: key, ...extra };
+  if (!key.startsWith('sb_secret_')) headers.Authorization = `Bearer ${key}`;
+  return headers;
+}
 async function updateProviderStatus(messageId, status, timestamp, errorInfo = null) {
   const { base, key } = config();
   const query = new URLSearchParams({ provider_message_id: `eq.${messageId}` }).toString();
   const response = await fetch(`${base}/rest/v1/crm_automation_attempts?${query}`, {
     method: 'PATCH',
-    headers: {
-      apikey: key, Authorization: `Bearer ${key}`,
+    headers: serverHeaders(key, {
       'Content-Type': 'application/json', Prefer: 'return=representation'
-    },
+    }),
     body: JSON.stringify({
       provider_status: status,
       provider_status_at: timestamp ? new Date(Number(timestamp) * 1000).toISOString() : new Date().toISOString(),
@@ -82,4 +86,4 @@ export default async request => {
   }
 };
 
-export const __test = { verifySignature, updateProviderStatus };
+export const __test = { verifySignature, updateProviderStatus, serverHeaders };
