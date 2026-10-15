@@ -1,16 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import { crmDatabaseConfig } from './lib/crm-database.mjs';
 
 const DEFAULT_BATCH_SIZE = 10;
 const RETRY_BASE_SECONDS = 60;
 const MAX_ERROR_LENGTH = 500;
 
 function supabaseConfig() {
-  const base = (process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
-  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-  if (!base || !key || key.startsWith('sb_publishable_')) {
-    throw new Error('Configuração secreta do Supabase ausente ou inválida.');
-  }
-  return { base, key };
+  const { url, key } = crmDatabaseConfig(process.env);
+  return { base: url, key };
 }
 
 function serverHeaders(key, extra = {}) {
@@ -342,4 +339,4 @@ export default async () => {
   }
 };
 
-export const __test = { retryDelaySeconds, isReviewEligible, reviewMessage, verifyReviewAgainstStoredState, processJob, sendWhatsAppTemplate, serverHeaders };
+export const __test = { retryDelaySeconds, isReviewEligible, reviewMessage, verifyReviewAgainstStoredState, processJob, sendWhatsAppTemplate, serverHeaders, supabaseConfig };
