@@ -16,6 +16,8 @@ jobs:
           node-version: 20
       - name: Check Netlify function syntax
         run: node --check netlify/functions/crm-state.mjs
+      - name: Test database isolation
+        run: node --test tests/*.test.mjs
       - name: Check inline JavaScript syntax
         run: |
           python3 - <<'PY'

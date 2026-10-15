@@ -1,13 +1,11 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { crmDatabaseConfig, CRM_DATABASE_URL } from './lib/crm-database.mjs';
 
 const DEFAULT_ORIGIN = 'https://peppy-salamander-2d8776.netlify.app';
 const SESSION_COOKIE = 'crm_session';
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
 
-const TABLE_URL = () => {
-  const base = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
-  return `${base}/rest/v1/crm_app_state`;
-};
+const TABLE_URL = () => `${crmDatabaseConfig(process.env).url}/rest/v1/crm_app_state`;
 
 const json = (statusCode, body, extraHeaders = {}) => new Response(JSON.stringify(body), {
   status: statusCode,
@@ -92,26 +90,9 @@ function clearSessionCookie() {
 
 async function supabaseRequest(method, query = '', body = null) {
   const url = TABLE_URL() + query;
-  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-  const supabaseUrl = (process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
-  if (!supabaseUrl || !key) {
-    console.error('CRM Supabase configuration check:', {
-      hasUrl: Boolean(supabaseUrl),
-      hasKey: Boolean(key),
-      keyLooksPublic: key.startsWith('sb_publishable_'),
-      keyLooksSecret: key.startsWith('sb_secret_')
-    });
-    const err = new Error('Configuração do Supabase incompleta no servidor. Confira SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no Netlify.');
-    err.status = 500;
-    throw err;
-  }
-  if (key.startsWith('sb_publishable_')) {
-    console.error('CRM Supabase configuration check: SUPABASE_SERVICE_ROLE_KEY contains a publishable key, not a server secret.');
-    const err = new Error('A chave recebida pela função do CRM é pública. No Netlify, configure a chave sb_secret_ em SUPABASE_SERVICE_ROLE_KEY com escopo Functions e contexto Production; depois publique novamente.');
-    err.status = 500;
-    throw err;
-  }
-  const headers = { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' };
+  const { url: supabaseUrl, key } = crmDatabaseConfig(process.env);
+  const headers = { apikey: key, Accept: 'application/json' };
+  if (!key.startsWith('sb_secret_')) headers.Authorization = `Bearer ${key}`;
   const options = { method, headers };
   if (body !== null) {
     headers['Content-Type'] = 'application/json';
@@ -130,7 +111,7 @@ async function supabaseRequest(method, query = '', body = null) {
       message: parsed?.message || null,
       keyLooksSecret: key.startsWith('sb_secret_'),
       keyLooksLegacyServiceRole: key.startsWith('eyJ'),
-      urlMatchesExpectedProject: supabaseUrl === 'https://pposribyzhxyupbxrpfo.supabase.co'
+      urlMatchesExpectedProject: supabaseUrl === CRM_DATABASE_URL
     });
     const detail = response.status === 401
       ? 'Supabase recusou a chave configurada no servidor (HTTP 401). Confira se SUPABASE_SERVICE_ROLE_KEY é a chave secreta do mesmo projeto indicado em SUPABASE_URL.'
