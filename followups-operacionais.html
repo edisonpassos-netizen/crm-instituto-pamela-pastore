@@ -49,7 +49,7 @@
   </section>
 </main>
 
-<div id="modalBack" class="modal-back"><div class="modal"><h2>Registrar resultado</h2><p id="leadInfo" class="muted"></p><form id="resultForm" class="grid"><input id="queueId" type="hidden"><div><label for="outcome">Resultado</label><select id="outcome" required><option value="contacted">Contato realizado</option><option value="no_answer">Sem resposta</option><option value="rescheduled">Cliente pediu retorno</option><option value="not_contacted">Não foi possível contatar</option></select></div><div><label for="note">Observação</label><textarea id="note" rows="4" maxlength="500"></textarea></div><p class="muted">Este registro apenas documenta a ação da equipe. Nenhuma mensagem é enviada por esta tela.</p><div class="toolbar"><button id="saveResult" class="btn primary" type="submit">Salvar resultado</button><button id="cancelResult" class="btn" type="button">Cancelar</button></div></form></div></div>
+<div id="modalBack" class="modal-back"><div class="modal"><h2>Registrar resultado</h2><p id="leadInfo" class="muted"></p><form id="resultForm" class="grid"><input id="queueId" type="hidden"><div><label for="outcome">Resultado</label><select id="outcome" required><option value="contacted">Contato realizado</option><option value="no_answer">Sem resposta</option><option value="rescheduled">Cliente pediu retorno</option><option value="not_contacted">Não foi possível contatar</option></select></div><div id="rescheduleWrap" class="hidden"><label for="rescheduleDate">Nova data do retorno</label><input id="rescheduleDate" type="date"></div><div><label for="note">Observação</label><textarea id="note" rows="4" maxlength="500"></textarea></div><p class="muted">Este registro conclui a tarefa atual no CRM. Quando houver reagendamento, um novo follow-up será criado para a data escolhida. Nenhuma mensagem é enviada por esta tela.</p><div class="toolbar"><button id="saveResult" class="btn primary" type="submit">Salvar resultado</button><button id="cancelResult" class="btn" type="button">Cancelar</button></div></form></div></div>
 
 <script>
 'use strict';
@@ -136,17 +136,30 @@ async function loadQueue(){
   }catch(error){$('queue').innerHTML=`<div class="empty error">${esc(error.message)}</div>`;$('status').textContent='Erro de conexão';if(error.status===401)await boot()}
 }
 
+function syncRescheduleField(){
+  const active=$('outcome').value==='rescheduled';
+  $('rescheduleWrap').classList.toggle('hidden',!active);
+  $('rescheduleDate').required=active;
+  if(active&&!$('rescheduleDate').value)$('rescheduleDate').value=today();
+}
 function openResult(id){
   const item=items.find(value=>value.id===id);if(!item)return;
-  const d=item.payload?.dispatch||{};$('queueId').value=id;$('leadInfo').textContent=`${d.lead_name||'Lead'}${d.recipient_phone?' • '+d.recipient_phone:''}`;$('note').value='';$('outcome').value='contacted';$('modalBack').style.display='flex';
+  const d=item.payload?.dispatch||{};$('queueId').value=id;$('leadInfo').textContent=`${d.lead_name||'Lead'}${d.recipient_phone?' • '+d.recipient_phone:''}`;$('note').value='';$('outcome').value='contacted';$('rescheduleDate').value='';syncRescheduleField();$('modalBack').style.display='flex';
 }
 function closeResult(){$('modalBack').style.display='none'}
+$('outcome').addEventListener('change',syncRescheduleField);
 $('cancelResult').addEventListener('click',closeResult);
 $('modalBack').addEventListener('click',event=>{if(event.target===$('modalBack'))closeResult()});
 $('refresh').addEventListener('click',async()=>{await Promise.all([loadCrmState(),loadQueue()])});
 $('resultForm').addEventListener('submit',async event=>{
   event.preventDefault();const button=$('saveResult');button.disabled=true;
-  try{await api('automation-queue-result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:$('queueId').value,outcome:$('outcome').value,note:$('note').value})});closeResult();await loadQueue()}
+  const rescheduled=$('outcome').value==='rescheduled';
+  try{
+    const result=await api('automation-queue-result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:$('queueId').value,outcome:$('outcome').value,note:$('note').value,rescheduleDate:rescheduled?$('rescheduleDate').value:null})});
+    closeResult();
+    await Promise.all([loadCrmState(),loadQueue()]);
+    $('createMessage').textContent=result.message||'Resultado registrado com sucesso.';
+  }
   catch(error){alert(error.message)}finally{button.disabled=false}
 });
 boot();
