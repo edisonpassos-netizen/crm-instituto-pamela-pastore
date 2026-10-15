@@ -126,11 +126,11 @@ async function sendWhatsAppTemplate(job) {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to,
-      type: 'template',
-      template: { name: templateName, language: { code: languageCode }, ...(components.length ? { components } : {}) }
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'template',
+        template: { name: templateName, language: { code: languageCode }, ...(components.length ? { components } : {}) }
       })
     });
   } catch (cause) {
@@ -310,15 +310,19 @@ async function processJob(job) {
 export const config = { schedule: '*/5 * * * *' };
 
 export default async () => {
-  if (process.env.AUTOMATIONS_ENABLED !== 'true') {
+  const externalEnabled = process.env.AUTOMATIONS_ENABLED === 'true';
+  const internalEnabled = process.env.INTERNAL_AUTOMATIONS_ENABLED === 'true';
+  if (!externalEnabled && !internalEnabled) {
     return new Response(JSON.stringify({ ok: true, disabled: true }), {
       status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
     });
   }
 
+  const mode = externalEnabled ? 'all' : 'internal_only';
+  const claimRpc = externalEnabled ? 'rpc/claim_due_automation_jobs' : 'rpc/claim_due_internal_automation_jobs';
   const requestId = randomUUID();
   try {
-    const jobs = await dbRequest('rpc/claim_due_automation_jobs', 'POST', {
+    const jobs = await dbRequest(claimRpc, 'POST', {
       p_limit: Math.max(1, Math.min(50, Number(process.env.AUTOMATION_BATCH_SIZE) || DEFAULT_BATCH_SIZE))
     });
     const list = Array.isArray(jobs) ? jobs : [];
@@ -328,12 +332,12 @@ export default async () => {
         console.error('automation job failed:', { requestId, jobId: job?.id, message: error?.message || 'unknown' });
       }
     }
-    return new Response(JSON.stringify({ ok: true, claimed: list.length, requestId }), {
+    return new Response(JSON.stringify({ ok: true, mode, claimed: list.length, requestId }), {
       status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
     });
   } catch (error) {
-    console.error('automation worker failed:', { requestId, message: error?.message || 'unknown' });
-    return new Response(JSON.stringify({ ok: false, requestId }), {
+    console.error('automation worker failed:', { requestId, mode, message: error?.message || 'unknown' });
+    return new Response(JSON.stringify({ ok: false, mode, requestId }), {
       status: 503, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
     });
   }
