@@ -51,7 +51,6 @@ function isReviewEligible(job) {
     && Boolean(job.recipient_phone);
 }
 
-
 async function verifyReviewAgainstStoredState(job) {
   const rows = await dbRequest('crm_app_state?id=eq.main&select=data', 'GET');
   const data = Array.isArray(rows) ? rows[0]?.data : null;
@@ -307,7 +306,8 @@ async function processJob(job) {
   }
 }
 
-export const config = { schedule: '* * * * *' };
+// A five-minute cadence is sufficient for dated commercial follow-ups and avoids unnecessary production invocations.
+export const config = { schedule: '*/5 * * * *' };
 
 export default async () => {
   if (process.env.AUTOMATIONS_ENABLED !== 'true') {
