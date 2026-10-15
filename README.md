@@ -30,6 +30,20 @@ Quando somente `INTERNAL_AUTOMATIONS_ENABLED=true`, o worker usa exclusivamente 
 
 Mesmo quando `AUTOMATIONS_ENABLED=true` for autorizado no futuro, o envio de WhatsApp continua exigindo separadamente `WHATSAPP_TEST_MODE=true`, credenciais válidas e destinatário presente na allowlist de teste. A ausência dessas condições deve falhar de forma fechada.
 
+## Homologação WhatsApp Cloud API
+
+A preparação de homologação mantém envios reais bloqueados e usa configuração separada da Meta:
+- `WHATSAPP_WEBHOOK_VERIFY_TOKEN` — segredo usado apenas no handshake GET de verificação do webhook; nunca gravar o valor no repositório.
+- `WHATSAPP_APP_SECRET` — segredo do app Meta, necessário para validar `x-hub-signature-256` em webhooks POST.
+- `WHATSAPP_ACCESS_TOKEN` — token de acesso da Cloud API; deve existir somente em variável secreta de servidor.
+- `WHATSAPP_PHONE_NUMBER_ID` — ID do número de teste ou oficial fornecido pela Meta.
+- `WHATSAPP_GRAPH_API_VERSION=v26.0` — versão fixada para a homologação atual.
+- `WHATSAPP_TEMPLATE_NAME` — nome exato de um template aprovado quando o teste de envio for habilitado.
+- `WHATSAPP_TEMPLATE_LANGUAGE=pt_BR` — idioma esperado para o template de teste.
+- `WHATSAPP_TEST_RECIPIENTS` — allowlist explícita de números autorizados para testes.
+
+Durante a homologação, `AUTOMATIONS_ENABLED=false` e `WHATSAPP_TEST_MODE=false` permanecem obrigatórios até que credenciais, webhook, número de teste e allowlist tenham sido validados separadamente. O webhook POST deve rejeitar payloads sem assinatura válida, e o worker nunca deve enviar para um destinatário fora de `WHATSAPP_TEST_RECIPIENTS`.
+
 ## Autenticação
 A função exige uma sessão assinada, armazenada em cookie `HttpOnly; Secure; SameSite=Strict` com validade de 8 horas. A origem/CORS é uma camada adicional e não substitui autenticação.
 
