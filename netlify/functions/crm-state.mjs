@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { crmDatabaseConfig, CRM_DATABASE_URL, CRM_PROJECT_REF } from './lib/crm-database.mjs';
+import { enqueueAutomationEvents } from './lib/automation-enqueue.mjs';
 
 const DEFAULT_ORIGIN = 'https://peppy-salamander-2d8776.netlify.app';
 const SESSION_COOKIE = 'crm_session';
@@ -23,14 +24,13 @@ function allowedOrigin(request) {
   try { requestOrigin = new URL(request.url).origin.replace(/\/$/, ''); } catch {}
   if (!expected) return false;
   if (origin) return origin === expected;
-  // Same-origin GETs may omit Origin. Never allow an origin-less write.
   return requestOrigin === expected && ['GET', 'HEAD'].includes(request.method);
 }
 
 function corsHeaders(request) {
   const origin = (request.headers.get('origin') || '').trim().replace(/\/$/, '');
   const headers = {
-    'Vary': 'Origin',
+    Vary: 'Origin',
     'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '600',
@@ -109,7 +109,6 @@ async function supabaseRequest(method, query = '', body = null) {
   let parsed = null;
   try { parsed = responseText ? JSON.parse(responseText) : null; } catch {}
   if (!response.ok) {
-    // Log only Supabase's non-secret error details; never log request headers or keys.
     console.error('CRM Supabase request failed:', {
       status: response.status,
       code: parsed?.code || null,
@@ -149,7 +148,7 @@ async function supabaseAutomationRequest(path, method = 'GET', body = null) {
   return parsed;
 }
 
-export default async (request) => {
+export default async request => {
   const cors = corsHeaders(request);
   const url = new URL(request.url);
   const action = url.searchParams.get('action') || '';
@@ -161,7 +160,6 @@ export default async (request) => {
 
   if (!allowedOrigin(request)) return json(403, { error: 'Origem não autorizada. Confira a URL configurada em CRM_ALLOWED_ORIGIN.' }, cors);
 
-  // Fixed readiness probe: verifies the real server key without exposing customer data.
   if (action === 'health' && request.method === 'GET') {
     try {
       const rows = await supabaseRequest('GET', '?id=eq.main&select=id');
@@ -181,9 +179,7 @@ export default async (request) => {
     }
     let body;
     try { body = await request.json(); } catch { return json(400, { error: 'Corpo JSON inválido.' }, cors); }
-    if (!safeEqual(body?.password, configuredPassword)) {
-      return json(401, { error: 'Senha incorreta.' }, cors);
-    }
+    if (!safeEqual(body?.password, configuredPassword)) return json(401, { error: 'Senha incorreta.' }, cors);
     try {
       const token = createSession();
       return json(200, { ok: true, expiresIn: SESSION_TTL_SECONDS }, { ...cors, 'Set-Cookie': sessionCookie(token) });
@@ -201,9 +197,7 @@ export default async (request) => {
     if (!process.env.CRM_LOGIN_PASSWORD || !process.env.CRM_SESSION_SECRET) {
       return json(503, { authenticated: false, error: 'Autenticação ainda não configurada no Netlify.' }, cors);
     }
-    return validSession(request)
-      ? json(200, { authenticated: true }, cors)
-      : json(401, { authenticated: false }, cors);
+    return validSession(request) ? json(200, { authenticated: true }, cors) : json(401, { authenticated: false }, cors);
   }
 
   if (action === 'automation-queue' && request.method === 'GET') {
@@ -268,6 +262,10 @@ export default async (request) => {
     if (!Number.isInteger(Number(payload.revision)) || Number(payload.revision) < 1) {
       return json(400, { error: 'Revisão ausente ou inválida. Recarregue os dados antes de salvar.' }, cors);
     }
+    if (payload.automationEvents !== undefined && (!Array.isArray(payload.automationEvents) || payload.automationEvents.length > 50)) {
+      return json(400, { error: 'automationEvents deve ser uma lista com no máximo 50 itens.' }, cors);
+    }
+
     const nextRevision = Number(payload.revision) + 1;
     const rows = await supabaseRequest(
       'PATCH',
@@ -277,7 +275,24 @@ export default async (request) => {
     if (!Array.isArray(rows) || !rows.length) {
       return json(409, { error: 'O CRM foi alterado em outra sessão. Atualize os dados antes de tentar novamente.' }, cors);
     }
-    return json(200, { revision: Number(rows[0].revision), updatedAt: rows[0].updated_at }, cors);
+
+    let automation = { acceptedEventIds: [], failures: [] };
+    if (payload.automationEvents !== undefined) {
+      try {
+        automation = await enqueueAutomationEvents(payload.automationEvents);
+      } catch (error) {
+        automation = {
+          acceptedEventIds: [],
+          failures: [{ clientEventId: null, message: String(error?.message || 'Queue unavailable').slice(0, 200) }]
+        };
+      }
+    }
+
+    return json(200, {
+      revision: Number(rows[0].revision),
+      updatedAt: rows[0].updated_at,
+      automation
+    }, cors);
   } catch (error) {
     console.error('crm-state function error:', error?.message || 'unknown error');
     return json(error?.status || 500, { error: error?.message || 'Erro inesperado ao acessar o banco remoto.' }, cors);
