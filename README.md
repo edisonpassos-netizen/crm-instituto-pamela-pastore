@@ -86,3 +86,4 @@ Mudanças de banco ou credenciais em produção devem preservar o isolamento do 
 
 > Homologação do envio outbound pelo backend concluída com sucesso em 16/10/2026 usando token de System User; uma única mensagem de teste foi aceita pela Cloud API e as travas externas foram restauradas imediatamente após o resultado.
 > Após a integração do modo de produção separado, o runtime foi republicado com `WHATSAPP_OUTBOUND_MODE=disabled` e `WHATSAPP_PRODUCTION_ENABLED=false`.
+> Pré-produção preparada para Brasil (`55`) e templates em português do Brasil (`pt_BR`), ainda sem Phone Number ID oficial nem nomes de templates aprovados.
