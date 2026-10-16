@@ -231,6 +231,7 @@ export default async request => {
     const outcome = String(body?.outcome || '').trim();
     const note = String(body?.note || '').trim().slice(0, 500);
     const rescheduleDate = String(body?.rescheduleDate || '').trim();
+    const rescheduleTime = String(body?.rescheduleTime || '').trim();
     const validId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
     const recovery = eventType === 'service_recovery_required';
     const allowedOutcomes = recovery
@@ -245,23 +246,28 @@ export default async request => {
       }
       const today = new Date().toISOString().slice(0, 10);
       if (rescheduleDate < today) return json(400, { error: 'A nova data do retorno não pode estar no passado.' }, cors);
+      if (!recovery && rescheduleTime && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(rescheduleTime)) {
+        return json(400, { error: 'Informe um horário válido para o retorno no formato HH:MM.' }, cors);
+      }
     }
     try {
-      const rpcName = recovery ? 'rpc/resolve_customer_experience_recovery' : 'rpc/resolve_automation_queue_manual_result_v2';
-      const result = await supabaseAutomationRequest(rpcName, 'POST', {
+      const rpcName = recovery ? 'rpc/resolve_customer_experience_recovery' : 'rpc/resolve_automation_queue_manual_result_v3';
+      const rpcBody = {
         p_queue_id: id,
         p_outcome: outcome,
         p_note: note,
         p_resolved_by: 'crm_operator',
         p_reschedule_date: outcome === 'rescheduled' ? rescheduleDate : null
-      });
+      };
+      if (!recovery) rpcBody.p_reschedule_time = outcome === 'rescheduled' ? (rescheduleTime || null) : null;
+      const result = await supabaseAutomationRequest(rpcName, 'POST', rpcBody);
       if (result?.conflict) return json(409, { error: 'A tarefa, experiência ou fila mudou desde a última atualização. Atualize a fila e tente novamente.' }, cors);
       const message = recovery
         ? outcome === 'rescheduled'
           ? 'Recuperação reagendada. Nenhuma mensagem foi enviada automaticamente.'
           : 'Recuperação registrada. O convite neutro de avaliação ficou preparado para a etapa posterior do fluxo.'
         : outcome === 'rescheduled'
-          ? 'Resultado registrado e novo follow-up criado para a data escolhida. Nenhuma mensagem foi enviada.'
+          ? `Resultado registrado e novo follow-up criado para ${rescheduleDate}${rescheduleTime ? ` às ${rescheduleTime}` : ''}. Nenhuma mensagem foi enviada.`
           : 'Resultado manual registrado e tarefa concluída no CRM. Nenhuma mensagem foi enviada pelo sistema.';
       return json(200, {
         ok: true,
@@ -271,6 +277,7 @@ export default async request => {
         appRevision: Number(result?.appRevision || 0) || null,
         rescheduledTaskId: result?.rescheduledTaskId || null,
         rescheduleDate: result?.rescheduleDate || null,
+        rescheduleTime: result?.rescheduleTime || null,
         reviewScheduled: result?.reviewScheduled === true,
         message
       }, cors);
