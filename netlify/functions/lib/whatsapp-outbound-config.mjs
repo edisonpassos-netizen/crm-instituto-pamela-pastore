@@ -63,12 +63,12 @@ export function resolveWhatsAppOutboundConfig(job, env = process.env) {
 
   const phoneNumberId = String(env.WHATSAPP_PRODUCTION_PHONE_NUMBER_ID || '').trim();
   const isReview = job?.channel === 'google_review';
-  const templateName = String(
+  const templateName = String((
     isReview ? env.WHATSAPP_PRODUCTION_REVIEW_TEMPLATE_NAME : env.WHATSAPP_PRODUCTION_TEMPLATE_NAME
-  || '').trim();
-  const languageCode = String(
+  ) || '').trim();
+  const languageCode = String((
     isReview ? env.WHATSAPP_PRODUCTION_REVIEW_TEMPLATE_LANGUAGE : env.WHATSAPP_PRODUCTION_TEMPLATE_LANGUAGE
-  || 'pt_BR').trim();
+  ) || 'pt_BR').trim();
   const allowedCountryCodes = csvDigits(env.WHATSAPP_PRODUCTION_ALLOWED_COUNTRY_CODES);
 
   validateTemplateConfig({ phoneNumberId, templateName });
