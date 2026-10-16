@@ -12,6 +12,9 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     X-Frame-Options = "DENY"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    X-Permitted-Cross-Domain-Policies = "none"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 
 [[headers]]
   for = "/netlify/functions/*"
