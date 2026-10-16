@@ -76,6 +76,8 @@ jobs:
       - name: Test pre-production audit hardening
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/preproduction-audit-hardening.sql
       - name: Apply main CRM atomic follow-up trigger
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610160004_atomic_main_followup_enqueue.sql
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610160004_atomic_main_followup_enqueue.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610160005_followup_source_integrity.sql
       - name: Test main CRM follow-up trigger
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/main-crm-followup-trigger.sql

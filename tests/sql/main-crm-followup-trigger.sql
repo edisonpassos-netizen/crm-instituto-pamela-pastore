@@ -75,7 +75,7 @@ begin
   end if;
 end $$;
 
--- New completed/malformed tasks are intentionally ignored.
+-- New completed/malformed/orphan tasks are intentionally ignored.
 update public.crm_app_state
 set data = jsonb_set(
       data,
@@ -83,7 +83,8 @@ set data = jsonb_set(
       (data->'tasks') || jsonb_build_array(
         jsonb_build_object('id','task-done','leadId','lead-1','date','2026-10-17','done',true),
         jsonb_build_object('id','task-no-lead','date','2026-10-17','done',false),
-        jsonb_build_object('id','task-bad-date','leadId','lead-1','date','amanha','done',false)
+        jsonb_build_object('id','task-bad-date','leadId','lead-1','date','amanha','done',false),
+        jsonb_build_object('id','task-orphan','leadId','lead-does-not-exist','date','2026-10-17','done',false)
       ),
       true
     ),
@@ -92,8 +93,8 @@ set data = jsonb_set(
 
 do $$
 begin
-  if exists (select 1 from public.crm_automation_queue where source_id in ('task-done','task-no-lead','task-bad-date')) then
-    raise exception 'invalid or completed task was enqueued';
+  if exists (select 1 from public.crm_automation_queue where source_id in ('task-done','task-no-lead','task-bad-date','task-orphan')) then
+    raise exception 'invalid, completed or orphan task was enqueued';
   end if;
 end $$;
 
