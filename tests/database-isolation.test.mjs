@@ -11,6 +11,10 @@ test('configuration rejects the Agenda URL and all other projects',()=>{
   for(const url of ['https://pposribyzhxyupbxrpfo.supabase.co','https://other.supabase.co','',CRM_DATABASE_URL+'.example.com']){
     assert.throws(()=>crmDatabaseConfig({SUPABASE_URL:url,SUPABASE_SERVICE_ROLE_KEY:'sb_secret_synthetic'}),/exclusivo/);
   }
+  assert.throws(
+    ()=>crmDatabaseConfig({SUPABASE_URL:'https://pposribyzhxyupbxrpfo.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'sb_secret_synthetic'}),
+    error=>error?.status===503 && /CRM oficial/.test(error.message) && !/crm-automation-test/.test(error.message)
+  );
 });
 test('configuration accepts only server credentials for the CRM project',()=>{
   assert.throws(()=>crmDatabaseConfig({SUPABASE_URL:CRM_DATABASE_URL,SUPABASE_SERVICE_ROLE_KEY:'sb_publishable_synthetic'}),/secreta/);
