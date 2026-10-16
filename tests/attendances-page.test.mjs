@@ -21,7 +21,7 @@ test('attendance completion records explicit consent and emits only the supporte
 
 test('attendance page can complete without consent and therefore without an automation event', () => {
   assert.match(html, /const events=consent\?\[\{/);
-  assert.match(html, /\}:\[\]/);
+  assert.match(html, /\}\]:\[\]/);
   assert.match(html, /status='Concluído'/);
 });
 
