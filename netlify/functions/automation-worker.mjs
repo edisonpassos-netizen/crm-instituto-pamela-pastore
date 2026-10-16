@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { crmDatabaseConfig } from './lib/crm-database.mjs';
+import { resolveWhatsAppOutboundConfig } from './lib/whatsapp-outbound-config.mjs';
 
 const DEFAULT_BATCH_SIZE = 10;
 const RETRY_BASE_SECONDS = 60;
@@ -88,29 +89,14 @@ function reviewMessage(job) {
 }
 
 async function sendWhatsAppTemplate(job) {
-  const token = (process.env.WHATSAPP_ACCESS_TOKEN || '').trim();
-  const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || '').trim();
-  const templateName = (process.env.WHATSAPP_TEMPLATE_NAME || '').trim();
-  const languageCode = (process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'pt_BR').trim();
-  const apiVersion = (process.env.WHATSAPP_GRAPH_API_VERSION || 'v23.0').trim();
-  if (!token || !phoneNumberId || !templateName) {
-    throw new Error('WhatsApp oficial não configurado: faltam credenciais ou modelo aprovado.');
-  }
-  if (!/^\d+$/.test(phoneNumberId)) throw new Error('WHATSAPP_PHONE_NUMBER_ID inválido.');
-  if (!/^v\d+\.0$/.test(apiVersion)) throw new Error('WHATSAPP_GRAPH_API_VERSION inválida.');
-  const to = String(job.recipient_phone || '').replace(/\D/g, '');
-  if (to.length < 10 || to.length > 15) throw new Error('Telefone do destinatário inválido.');
-
-  // This branch is test-only: outbound sends require an explicit test-mode
-  // switch and a strict allowlist of operator-controlled test numbers.
-  if (process.env.WHATSAPP_TEST_MODE !== 'true') {
-    throw new Error('Envio bloqueado: WHATSAPP_TEST_MODE não está habilitado.');
-  }
-  const allowedRecipients = (process.env.WHATSAPP_TEST_RECIPIENTS || '')
-    .split(',').map(value => value.replace(/\D/g, '')).filter(Boolean);
-  if (!allowedRecipients.includes(to)) {
-    throw new Error('Envio bloqueado: destinatário não consta na lista de teste.');
-  }
+  const {
+    token,
+    phoneNumberId,
+    templateName,
+    languageCode,
+    apiVersion,
+    to
+  } = resolveWhatsAppOutboundConfig(job, process.env);
 
   const p = job.payload || {};
   const components = [];
