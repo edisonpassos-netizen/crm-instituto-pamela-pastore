@@ -5,11 +5,16 @@ Repositório do CRM publicado no Netlify, com persistência no Supabase.
 ## Estrutura
 - `index.html`: interface do CRM e tela de acesso.
 - `followups-operacionais.html`: fila autenticada de follow-ups e recuperação de experiência.
+- `atendimentos-operacionais.html`: registro autenticado de atendimentos, conclusão e autorização de acompanhamento pós-atendimento.
 - `netlify/functions/crm-state.mjs`: API de leitura/gravação, autenticação e resultados operacionais.
 - `netlify/functions/automation-worker.mjs`: worker agendado de automações, fail-closed por padrão.
 - `netlify/functions/whatsapp-status-webhook.mjs`: webhook assinado para status, mensagens inbound e respostas da pesquisa de experiência.
 - `netlify/functions/lib/customer-experience.mjs`: classificação estrita das respostas da pesquisa.
 - `netlify.toml`: configuração de build e funções.
+
+Rotas operacionais:
+- `/followups` — fila manual de follow-ups e recuperação.
+- `/atendimentos` — criação e conclusão de atendimentos.
 
 ## Variáveis obrigatórias no Netlify
 - `SUPABASE_URL`
@@ -33,12 +38,23 @@ Com `CUSTOMER_EXPERIENCE_ENABLED=false`, um evento futuro de atendimento conclu�
 
 Quando somente a automação interna está habilitada, o worker reivindica exclusivamente `channel='internal'`; WhatsApp e Google Review permanecem fora do claim.
 
-## Fluxo de experiência do cliente
+## Follow-ups do CRM principal
+Novos follow-ups persistidos em `crm_app_state.data.tasks` são detectados por trigger transacional do banco e enfileirados automaticamente como `lead_follow_up_requested` em `channel='internal'`.
+
+A criação do registro e o enqueue acontecem na mesma transação do Supabase. A deduplicação usa `crm:lead_follow_up_requested:task:<task_id>`, portanto uma edição posterior da mesma tarefa não cria outro job. Tarefas já concluídas, sem `leadId` ou com data inválida são ignoradas pelo trigger.
+
+Esse mecanismo também cobre follow-ups criados pela tela principal, criação automática de tarefas e recuperação, sem depender de chamada direta à Meta e sem ativar mensagens externas.
+
+## Fluxo de atendimento e experiência do cliente
+A rota `/atendimentos` registra o atendimento como `Agendado` e permite concluí-lo ou cancelá-lo preservando o histórico.
+
+Na conclusão, o operador pode registrar explicitamente se o cliente autorizou contato de acompanhamento pelo WhatsApp. Somente quando essa autorização está registrada e o telefone é válido a interface emite o evento de domínio `service_completed`. A página nunca chama a API da Meta diretamente.
+
 O CRM separa satisfação, recuperação e reputação:
 
 `service_completed → satisfaction_request → satisfaction_response`
 
-- **Muito boa** (`experience_very_good`) → prepara `review_invitation` neutro.
+- **Excelente** (`experience_very_good`) → prepara `review_invitation` neutro.
 - **Boa** (`experience_good`) → prepara `review_invitation` neutro.
 - **Poderia melhorar** (`experience_needs_improvement`) → cria `service_recovery_required` para a recepção.
 - Após a recepção registrar o caso como resolvido **ou encerrado sem solução**, o CRM prepara o mesmo convite neutro de avaliação, com atraso operacional. O convite não pede nota nem estrelas.
@@ -60,10 +76,12 @@ Variáveis:
 - `WHATSAPP_PRODUCTION_REVIEW_TEMPLATE_LANGUAGE=pt_BR`
 - `WHATSAPP_PRODUCTION_TEMPLATE_NAME` / `WHATSAPP_PRODUCTION_TEMPLATE_LANGUAGE` para outros casos futuros.
 
-O template de satisfação deve usar opções estáveis equivalentes a:
-- `experience_very_good` → Muito boa
+O template de satisfação usa três respostas visíveis, com payloads estáveis:
+- `experience_very_good` → Excelente
 - `experience_good` → Boa
 - `experience_needs_improvement` → Poderia melhorar
+
+O classificador também reconhece `Excelente` como fallback textual caso a plataforma devolva o rótulo em vez do payload estável.
 
 O código nunca usa `hello_world` como fallback de produção.
 
@@ -93,11 +111,11 @@ Execute:
 
 `node --test tests/*.test.mjs`
 
-A CI também cria PostgreSQL efêmero e valida migrations, RLS, satisfação, recuperação, convite pós-recuperação, idempotência e o feature gate antes de qualquer ativação.
+A CI também cria PostgreSQL efêmero e valida migrations, RLS, satisfação, recuperação, convite pós-recuperação, idempotência, feature gates e o trigger transacional de follow-ups antes de qualquer ativação.
 
 ## Antes de ativar dados reais
 - manter todas as travas externas e `CUSTOMER_EXPERIENCE_ENABLED` desligadas;
-- criar e aprovar os templates reais em português;
+- obter aprovação dos templates reais em português;
 - definir a estratégia segura para o número oficial já em uso;
 - homologar o Phone Number ID oficial sem interromper WhatsApp Business;
 - fazer teste controlado com números internos;
@@ -106,4 +124,4 @@ A CI também cria PostgreSQL efêmero e valida migrations, RLS, satisfação, re
 > Homologação outbound do backend concluída em 16/10/2026 com token de System User; uma única mensagem de teste foi aceita pela Cloud API e as travas foram restauradas.
 > Pré-produção permanece `disabled`, restrita ao Brasil (`55`) e preparada para `pt_BR`.
 > Runtime republicado após configurar `CUSTOMER_EXPERIENCE_ENABLED=false`; o módulo está instalado, porém não cria novas pesquisas até ativação explícita.
-> Templates de produção pré-configurados no Netlify em 16/10/2026: `pesquisa_experiencia_pos_atendimento_v1` e `avaliacao_google_pos_atendimento_v1`, ambos `pt_BR`.
+> Templates de produção pré-configurados no Netlify em 16/10/2026: `pesquisa_experiencia_pos_atendimento_v1` e `avaliacao_google_pos_atendimento_v1`, ambos `pt_BR`, atualmente aguardando aprovação da Meta.

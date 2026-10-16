@@ -19,7 +19,7 @@ jobs:
       - name: Check worker and API syntax
         run: node --check netlify/functions/automation-worker.mjs && node --check netlify/functions/lib/automation-event-adapter.mjs && node --check netlify/functions/lib/automation-enqueue.mjs && node --check netlify/functions/lib/customer-experience.mjs && node --check netlify/functions/lib/whatsapp-outbound-config.mjs && node --check netlify/functions/crm-state.mjs && node --check netlify/functions/whatsapp-status-webhook.mjs
       - name: Run automation unit, lifecycle, experience and operator page tests
-        run: node --test tests/automation-worker.test.mjs tests/automation-lifecycle.test.mjs tests/automation-event-adapter.test.mjs tests/automation-crm-integration.test.mjs tests/customer-experience.test.mjs tests/satisfaction-quick-replies.test.mjs tests/whatsapp-missing-message-id.test.mjs tests/whatsapp-api-mock.test.mjs tests/whatsapp-status-webhook.test.mjs tests/automation-operator-queue.test.mjs tests/followups-page.test.mjs tests/automation-schedule.test.mjs
+        run: node --test tests/automation-worker.test.mjs tests/automation-lifecycle.test.mjs tests/automation-event-adapter.test.mjs tests/automation-crm-integration.test.mjs tests/customer-experience.test.mjs tests/satisfaction-quick-replies.test.mjs tests/whatsapp-missing-message-id.test.mjs tests/whatsapp-api-mock.test.mjs tests/whatsapp-status-webhook.test.mjs tests/automation-operator-queue.test.mjs tests/followups-page.test.mjs tests/attendances-page.test.mjs tests/automation-schedule.test.mjs
 
   database-integration:
     runs-on: ubuntu-latest
@@ -46,6 +46,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Create test-only Supabase roles
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/automation-test-roles.sql
+      - name: Apply CRM state foundation
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610090001_create_crm_app_state.sql
       - name: Apply proposed migration to ephemeral PostgreSQL
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610120001_automation_engine.sql
       - name: Test deduplication, atomic claim, stale lock recovery, and closed public access
@@ -73,3 +75,7 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/customer-experience-flow.sql
       - name: Test pre-production audit hardening
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/preproduction-audit-hardening.sql
+      - name: Apply main CRM atomic follow-up trigger
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610160004_atomic_main_followup_enqueue.sql
+      - name: Test main CRM follow-up trigger
+        run: psql -v ON_ERROR_STOP=1 -f tests/sql/main-crm-followup-trigger.sql
