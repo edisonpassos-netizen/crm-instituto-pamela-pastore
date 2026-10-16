@@ -78,12 +78,13 @@ test('authenticated handler uses only the CRM project and preserves CAS behavior
     reply=await handler(request('GET','',null,cookie));assert.equal(reply.status,200);assert.equal((await reply.json()).revision,15);
     reply=await handler(request('PUT','',{data:{leads:[]},revision:15},cookie));assert.equal(reply.status,200);
     assert.ok(calls.every(c=>c.url.startsWith(CRM_DATABASE_URL+'/rest/v1/crm_app_state')));
-    assert.match(calls[1].url,/revision=eq\.15/);assert.equal(JSON.parse(calls[1].options.body).revision,16);
+    assert.equal(calls[1].options.method,'GET');assert.match(calls[1].url,/select=data,revision/);
+    assert.equal(calls[2].options.method,'PATCH');assert.match(calls[2].url,/revision=eq\.15/);assert.equal(JSON.parse(calls[2].options.body).revision,16);
     assert.equal(calls[0].options.headers.apikey,'sb_secret_synthetic');assert.equal(calls[0].options.headers.Authorization,undefined);
     let before=calls.length;process.env.SUPABASE_URL='https://pposribyzhxyupbxrpfo.supabase.co';
     reply=await handler(request('GET','',null,cookie));assert.equal(reply.status,503);assert.equal(calls.length,before);
     process.env.SUPABASE_URL=CRM_DATABASE_URL;
-    globalThis.fetch=async()=>Response.json([]);
+    globalThis.fetch=async()=>Response.json([{data:{leads:[]},revision:16}]);
     reply=await handler(request('PUT','',{data:{leads:[]},revision:15},cookie));assert.equal(reply.status,409);
     reply=await handler(request('GET'));assert.equal(reply.status,401);
   }finally{
