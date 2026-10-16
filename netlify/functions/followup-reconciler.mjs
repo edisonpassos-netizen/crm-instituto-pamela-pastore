@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { crmDatabaseConfig } from './lib/crm-database.mjs';
 
 const DEFAULT_LIMIT = 100;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function supabaseConfig(env = process.env) {
   const { url, key } = crmDatabaseConfig(env);
@@ -30,10 +31,18 @@ async function dbRequest(path, method = 'GET', body = null, env = process.env) {
   return parsed;
 }
 
+function validSourceTask(task, leadIds) {
+  const id = String(task?.id || '').trim();
+  const leadId = String(task?.leadId || '').trim();
+  const date = String(task?.date || '').trim();
+  return Boolean(task && task.done !== true && id && leadId && DATE_RE.test(date) && leadIds.has(leadId));
+}
+
 function pendingUnqueuedTasks(data, queuedSourceIds = new Set(), limit = DEFAULT_LIMIT) {
   const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+  const leadIds = new Set((Array.isArray(data?.leads) ? data.leads : []).map(lead => String(lead?.id || '').trim()).filter(Boolean));
   return tasks
-    .filter(task => task && task.done !== true && String(task.id || '').trim())
+    .filter(task => validSourceTask(task, leadIds))
     .filter(task => !queuedSourceIds.has(String(task.id)))
     .sort((a, b) => `${a.date || ''} ${a.time || ''}`.localeCompare(`${b.date || ''} ${b.time || ''}`))
     .slice(0, Math.max(1, Math.min(500, Number(limit) || DEFAULT_LIMIT)));
@@ -53,6 +62,7 @@ function queueCommand(task, now = new Date()) {
       source_id: sourceId,
       occurred_at: now.toISOString(),
       task: 'follow_up_lead',
+      origin: 'followup_reconciler',
       reconciled: true
     },
     p_channel: 'internal',
@@ -77,7 +87,8 @@ async function reconcileFollowUps(env = process.env) {
     env
   );
   const queued = new Set((Array.isArray(queueRows) ? queueRows : []).map(row => String(row?.source_id || '')).filter(Boolean));
-  const allOpen = (Array.isArray(data.tasks) ? data.tasks : []).filter(task => task && task.done !== true && String(task.id || '').trim());
+  const leadIds = new Set((Array.isArray(data.leads) ? data.leads : []).map(lead => String(lead?.id || '').trim()).filter(Boolean));
+  const allEligible = (Array.isArray(data.tasks) ? data.tasks : []).filter(task => validSourceTask(task, leadIds));
   const missing = pendingUnqueuedTasks(data, queued, env.FOLLOWUP_RECONCILE_LIMIT || DEFAULT_LIMIT);
   const failures = [];
   let enqueued = 0;
@@ -93,7 +104,7 @@ async function reconcileFollowUps(env = process.env) {
 
   return {
     disabled: false,
-    scanned: allOpen.length,
+    scanned: allEligible.length,
     missing: missing.length,
     enqueued,
     failures
@@ -119,4 +130,4 @@ export default async () => {
   }
 };
 
-export const __test = { supabaseConfig, serverHeaders, pendingUnqueuedTasks, queueCommand, reconcileFollowUps, dbRequest };
+export const __test = { supabaseConfig, serverHeaders, validSourceTask, pendingUnqueuedTasks, queueCommand, reconcileFollowUps, dbRequest };
