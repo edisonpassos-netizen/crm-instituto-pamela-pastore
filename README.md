@@ -69,3 +69,5 @@ A variável `SUPABASE_SERVICE_ROLE_KEY` aceita uma chave moderna `sb_secret_` ou
 Execute `node --test tests/*.test.mjs` para conferir o destino, a rejeição de chaves de outro projeto, a autenticação, worker/webhook e a proteção contra revisão desatualizada. Os testes HTTP usam respostas simuladas.
 
 Mudanças de banco ou credenciais em produção devem preservar o isolamento do CRM, validar leitura/gravação e manter rollback disponível antes de revogar qualquer credencial anterior. Não revogue credenciais compartilhadas sem identificar seus outros consumidores.
+
+> Homologação externa temporariamente habilitada em 16/10/2026 para teste único do backend; restaurar as travas após o resultado.
