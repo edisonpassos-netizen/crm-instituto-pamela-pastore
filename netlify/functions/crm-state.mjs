@@ -94,6 +94,16 @@ function serverHeaders(key) {
   return headers;
 }
 
+function businessRecordCount(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return 0;
+  return ['leads', 'tasks', 'sales', 'attendances']
+    .reduce((total, key) => total + (Array.isArray(data[key]) ? data[key].length : 0), 0);
+}
+
+function wouldEraseAllBusinessData(currentData, nextData) {
+  return businessRecordCount(currentData) > 0 && businessRecordCount(nextData) === 0;
+}
+
 async function supabaseRequest(method, query = '', body = null) {
   const url = TABLE_URL() + query;
   const { url: supabaseUrl, key } = crmDatabaseConfig(process.env);
@@ -293,6 +303,20 @@ export default async request => {
       return json(400, { error: 'automationEvents deve ser uma lista com no máximo 50 itens.' }, cors);
     }
 
+    const currentRows = await supabaseRequest('GET', '?id=eq.main&select=data,revision');
+    if (!Array.isArray(currentRows) || currentRows.length !== 1) {
+      return json(503, { error: 'Não foi possível validar o estado atual antes de salvar.' }, cors);
+    }
+    const currentRevision = Number(currentRows[0].revision);
+    if (currentRevision !== Number(payload.revision)) {
+      return json(409, { error: 'O CRM foi alterado em outra sessão. Atualize os dados antes de tentar novamente.' }, cors);
+    }
+    if (wouldEraseAllBusinessData(currentRows[0].data, payload.data)) {
+      return json(409, {
+        error: 'Gravação bloqueada para evitar apagar todos os dados da nuvem. Use um fluxo administrativo explícito para uma limpeza total.'
+      }, cors);
+    }
+
     const nextRevision = Number(payload.revision) + 1;
     const rows = await supabaseRequest(
       'PATCH',
@@ -325,3 +349,5 @@ export default async request => {
     return json(error?.status || 500, { error: error?.message || 'Erro inesperado ao acessar o banco remoto.' }, cors);
   }
 };
+
+export const __test = { businessRecordCount, wouldEraseAllBusinessData };
