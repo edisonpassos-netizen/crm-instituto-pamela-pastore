@@ -43,13 +43,13 @@ test('explicit CRM origin allowlist does not implicitly trust production origin'
   }finally{restore(previous)}
 });
 
-test('manual follow-up result calls atomic v2 RPC and never sends externally', async () => {
+test('manual follow-up result calls atomic v3 RPC and never sends externally', async () => {
   const previous={fetch:globalThis.fetch,env:envSnapshot()};setup();const requests=[];
-  globalThis.fetch=async(url,options={})=>{const record={url:String(url),body:options.body?JSON.parse(options.body):null};requests.push(record);if(record.url.includes('/rpc/resolve_automation_queue_manual_result_v2'))return new Response(JSON.stringify({conflict:false,item:{id:QUEUE_ID,status:'completed'},appRevision:9}),{status:200});return new Response('unexpected',{status:500})};
+  globalThis.fetch=async(url,options={})=>{const record={url:String(url),body:options.body?JSON.parse(options.body):null};requests.push(record);if(record.url.includes('/rpc/resolve_automation_queue_manual_result_v3'))return new Response(JSON.stringify({conflict:false,item:{id:QUEUE_ID,status:'completed'},appRevision:9}),{status:200});return new Response('unexpected',{status:500})};
   try{
     const response=await handler(request(ORIGIN+'/.netlify/functions/crm-state?action=automation-queue-result','POST',{id:QUEUE_ID,eventType:'lead_follow_up_requested',outcome:'contacted',note:'Contato realizado.'}));
     assert.equal(response.status,200);const payload=await response.json();assert.match(payload.message,/tarefa concluída/i);assert.equal(payload.appRevision,9);
-    const rpc=requests.find(r=>r.url.includes('resolve_automation_queue_manual_result_v2'));assert.equal(rpc.body.p_outcome,'contacted');assert.equal(rpc.body.p_reschedule_date,null);assert.equal(requests.some(r=>r.url.includes('graph.facebook.com')),false);
+    const rpc=requests.find(r=>r.url.includes('resolve_automation_queue_manual_result_v3'));assert.equal(rpc.body.p_outcome,'contacted');assert.equal(rpc.body.p_reschedule_date,null);assert.equal(rpc.body.p_reschedule_time,null);assert.equal(requests.some(r=>r.url.includes('graph.facebook.com')),false);
   }finally{restore(previous)}
 });
 
@@ -59,7 +59,7 @@ test('service recovery result uses dedicated recovery RPC and prepares later neu
   try{
     const response=await handler(request(ORIGIN+'/.netlify/functions/crm-state?action=automation-queue-result','POST',{id:QUEUE_ID,eventType:'service_recovery_required',outcome:'resolved',note:'Conversamos com o cliente e ajustamos o atendimento.'}));
     assert.equal(response.status,200);const payload=await response.json();assert.equal(payload.reviewScheduled,true);assert.match(payload.message,/convite neutro de avaliação/i);
-    const rpc=requests.find(r=>r.url.includes('resolve_customer_experience_recovery'));assert.equal(rpc.body.p_outcome,'resolved');assert.equal(rpc.body.p_reschedule_date,null);assert.equal(requests.some(r=>r.url.includes('graph.facebook.com')),false);
+    const rpc=requests.find(r=>r.url.includes('resolve_customer_experience_recovery'));assert.equal(rpc.body.p_outcome,'resolved');assert.equal(rpc.body.p_reschedule_date,null);assert.equal('p_reschedule_time' in rpc.body,false);assert.equal(requests.some(r=>r.url.includes('graph.facebook.com')),false);
   }finally{restore(previous)}
 });
 
@@ -72,12 +72,28 @@ test('recovery unresolved is accepted but invalid follow-up outcome is rejected'
   }finally{restore(previous)}
 });
 
-test('rescheduled result requires a valid future date and forwards it to the selected RPC', async () => {
+test('follow-up reschedule forwards date and requested time to v3 RPC', async () => {
   const previous={fetch:globalThis.fetch,env:envSnapshot()};setup();let calls=0;
-  globalThis.fetch=async(url,options={})=>{calls++;const body=JSON.parse(options.body);assert.match(String(url),/resolve_customer_experience_recovery/);assert.equal(body.p_outcome,'rescheduled');assert.equal(body.p_reschedule_date,'2099-12-31');return new Response(JSON.stringify({conflict:false,rescheduleDate:'2099-12-31'}),{status:200})};
+  globalThis.fetch=async(url,options={})=>{calls++;const body=JSON.parse(options.body);assert.match(String(url),/resolve_automation_queue_manual_result_v3/);assert.equal(body.p_outcome,'rescheduled');assert.equal(body.p_reschedule_date,'2099-12-31');assert.equal(body.p_reschedule_time,'14:30');return new Response(JSON.stringify({conflict:false,rescheduleDate:'2099-12-31',rescheduleTime:'14:30'}),{status:200})};
+  try{
+    const response=await handler(request(ORIGIN+'/.netlify/functions/crm-state?action=automation-queue-result','POST',{id:QUEUE_ID,eventType:'lead_follow_up_requested',outcome:'rescheduled',note:'Cliente pediu retorno.',rescheduleDate:'2099-12-31',rescheduleTime:'14:30'}));
+    assert.equal(response.status,200);assert.equal(calls,1);const payload=await response.json();assert.equal(payload.rescheduleTime,'14:30');assert.match(payload.message,/14:30/);
+  }finally{restore(previous)}
+});
+
+test('service recovery reschedule remains date-only and uses dedicated RPC', async () => {
+  const previous={fetch:globalThis.fetch,env:envSnapshot()};setup();let calls=0;
+  globalThis.fetch=async(url,options={})=>{calls++;const body=JSON.parse(options.body);assert.match(String(url),/resolve_customer_experience_recovery/);assert.equal(body.p_outcome,'rescheduled');assert.equal(body.p_reschedule_date,'2099-12-31');assert.equal('p_reschedule_time' in body,false);return new Response(JSON.stringify({conflict:false,rescheduleDate:'2099-12-31'}),{status:200})};
   try{
     const missing=await handler(request(ORIGIN+'/.netlify/functions/crm-state?action=automation-queue-result','POST',{id:QUEUE_ID,eventType:'service_recovery_required',outcome:'rescheduled'}));assert.equal(missing.status,400);assert.equal(calls,0);
     const response=await handler(request(ORIGIN+'/.netlify/functions/crm-state?action=automation-queue-result','POST',{id:QUEUE_ID,eventType:'service_recovery_required',outcome:'rescheduled',note:'Retornar depois.',rescheduleDate:'2099-12-31'}));assert.equal(response.status,200);assert.equal(calls,1);
+  }finally{restore(previous)}
+});
+
+test('malformed follow-up reschedule time is rejected before touching Supabase', async () => {
+  const previous={fetch:globalThis.fetch,env:envSnapshot()};setup();let calls=0;globalThis.fetch=async()=>{calls++;return new Response('unexpected',{status:500})};
+  try{
+    const response=await handler(request(ORIGIN+'/.netlify/functions/crm-state?action=automation-queue-result','POST',{id:QUEUE_ID,eventType:'lead_follow_up_requested',outcome:'rescheduled',rescheduleDate:'2099-12-31',rescheduleTime:'25:90'}));assert.equal(response.status,400);assert.equal(calls,0);
   }finally{restore(previous)}
 });
 
