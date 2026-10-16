@@ -71,3 +71,4 @@ Execute `node --test tests/*.test.mjs` para conferir o destino, a rejeição de 
 Mudanças de banco ou credenciais em produção devem preservar o isolamento do CRM, validar leitura/gravação e manter rollback disponível antes de revogar qualquer credencial anterior. Não revogue credenciais compartilhadas sem identificar seus outros consumidores.
 
 > Teste único de homologação do backend executado em 16/10/2026; travas externas restauradas após a tentativa.
+> Reteste controlado iniciado após rotação para token de System User em 16/10/2026.
