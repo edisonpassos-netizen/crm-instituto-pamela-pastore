@@ -19,15 +19,15 @@ test('CRM follow-up event becomes a deduplicated internal queue command', () => 
   assert.equal(command.max_attempts, 3);
 });
 
-test('service completion becomes a review candidate with no client-supplied contact data', () => {
+test('service completion becomes a satisfaction request candidate with no client-supplied contact data', () => {
   const command = toAutomationCommand({
     type: 'service_completed', sourceType: 'attendance', sourceId: 'attendance-42',
     occurredAt: '2026-10-10T12:00:00.000Z', recipient_phone: '5515999999999',
     customer_opt_in: true, google_review_url: 'https://evil.example'
   });
-  assert.equal(command.dedupe_key, 'crm:service_completed:attendance:attendance-42');
-  assert.equal(command.event_type, 'service_completed');
-  assert.equal(command.channel, 'google_review');
+  assert.equal(command.dedupe_key, 'crm:satisfaction_request:attendance:attendance-42');
+  assert.equal(command.event_type, 'satisfaction_request');
+  assert.equal(command.channel, 'whatsapp');
   assert.equal(command.recipient_phone, null);
   assert.deepEqual(command.payload, { attendance_id: 'attendance-42', occurred_at: '2026-10-10T12:00:00.000Z' });
 });
