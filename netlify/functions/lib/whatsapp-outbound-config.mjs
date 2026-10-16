@@ -33,6 +33,25 @@ function validateTemplateConfig({ phoneNumberId, templateName }) {
   if (!templateName) throw new Error('Modelo aprovado do WhatsApp não configurado.');
 }
 
+function productionTemplate(job, env) {
+  if (job?.event_type === 'satisfaction_request') {
+    return {
+      templateName: env.WHATSAPP_PRODUCTION_SATISFACTION_TEMPLATE_NAME,
+      languageCode: env.WHATSAPP_PRODUCTION_SATISFACTION_TEMPLATE_LANGUAGE || 'pt_BR'
+    };
+  }
+  if (job?.channel === 'google_review' || job?.event_type === 'review_invitation') {
+    return {
+      templateName: env.WHATSAPP_PRODUCTION_REVIEW_TEMPLATE_NAME,
+      languageCode: env.WHATSAPP_PRODUCTION_REVIEW_TEMPLATE_LANGUAGE || 'pt_BR'
+    };
+  }
+  return {
+    templateName: env.WHATSAPP_PRODUCTION_TEMPLATE_NAME,
+    languageCode: env.WHATSAPP_PRODUCTION_TEMPLATE_LANGUAGE || 'pt_BR'
+  };
+}
+
 export function resolveWhatsAppOutboundConfig(job, env = process.env) {
   const mode = outboundMode(env);
   if (mode === 'disabled') throw new Error('Envio bloqueado: WHATSAPP_OUTBOUND_MODE está desabilitado.');
@@ -62,13 +81,9 @@ export function resolveWhatsAppOutboundConfig(job, env = process.env) {
   }
 
   const phoneNumberId = String(env.WHATSAPP_PRODUCTION_PHONE_NUMBER_ID || '').trim();
-  const isReview = job?.channel === 'google_review';
-  const templateName = String((
-    isReview ? env.WHATSAPP_PRODUCTION_REVIEW_TEMPLATE_NAME : env.WHATSAPP_PRODUCTION_TEMPLATE_NAME
-  ) || '').trim();
-  const languageCode = String((
-    isReview ? env.WHATSAPP_PRODUCTION_REVIEW_TEMPLATE_LANGUAGE : env.WHATSAPP_PRODUCTION_TEMPLATE_LANGUAGE
-  ) || 'pt_BR').trim();
+  const selected = productionTemplate(job, env);
+  const templateName = String(selected.templateName || '').trim();
+  const languageCode = String(selected.languageCode || 'pt_BR').trim();
   const allowedCountryCodes = csvDigits(env.WHATSAPP_PRODUCTION_ALLOWED_COUNTRY_CODES);
 
   validateTemplateConfig({ phoneNumberId, templateName });
@@ -82,4 +97,4 @@ export function resolveWhatsAppOutboundConfig(job, env = process.env) {
   return { mode, token, apiVersion, to, phoneNumberId, templateName, languageCode };
 }
 
-export const __test = { digits, csvDigits, outboundMode };
+export const __test = { digits, csvDigits, outboundMode, productionTemplate };

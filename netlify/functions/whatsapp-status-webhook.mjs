@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { crmDatabaseConfig } from './lib/crm-database.mjs';
+import { classifyCustomerExperienceResponse } from './lib/customer-experience.mjs';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
@@ -45,6 +46,27 @@ async function updateProviderStatus(messageId, status, timestamp, errorInfo = nu
   return await response.json().catch(() => []);
 }
 
+function inboundResponseFields(message, type) {
+  if (type === 'text') {
+    return { textBody: String(message?.text?.body || ''), responseKey: null };
+  }
+  if (type === 'button') {
+    return {
+      textBody: String(message?.button?.text || ''),
+      responseKey: String(message?.button?.payload || message?.button?.text || '')
+    };
+  }
+  if (type === 'interactive') {
+    const interactive = message?.interactive || {};
+    const reply = interactive?.button_reply || interactive?.list_reply || {};
+    return {
+      textBody: String(reply?.title || ''),
+      responseKey: String(reply?.id || reply?.title || '')
+    };
+  }
+  return { textBody: null, responseKey: null };
+}
+
 function extractInboundMessages(payload) {
   const messages = [];
   for (const entry of payload?.entry || []) {
@@ -62,13 +84,16 @@ function extractInboundMessages(payload) {
         const type = String(message?.type || '').trim();
         if (!id || !from || !type) continue;
         const timestamp = Number(message?.timestamp);
+        const response = inboundResponseFields(message, type);
         messages.push({
           id,
           phoneNumberId,
           contactWaId: from,
           contactName: contacts.get(from) || '',
           type,
-          textBody: type === 'text' ? String(message?.text?.body || '') : null,
+          textBody: response.textBody,
+          responseKey: response.responseKey,
+          contextMessageId: String(message?.context?.id || '').trim() || null,
           timestamp: Number.isFinite(timestamp) ? new Date(timestamp * 1000).toISOString() : null,
           payload: message
         });
@@ -101,6 +126,31 @@ async function persistInboundMessage(message) {
   try { parsed = raw ? JSON.parse(raw) : null; } catch {}
   if (!response.ok) throw new Error(`Inbound message persistence failed (HTTP ${response.status}).`);
   return parsed || {};
+}
+
+async function recordExperienceResponse(message) {
+  const satisfaction = classifyCustomerExperienceResponse(message);
+  if (!satisfaction) return { classified: false, matched: false, action: 'none' };
+
+  const { url: base, key } = config();
+  const response = await fetch(`${base}/rest/v1/rpc/record_customer_experience_response`, {
+    method: 'POST',
+    headers: serverHeaders(key, {
+      'Content-Type': 'application/json', Accept: 'application/json'
+    }),
+    body: JSON.stringify({
+      p_provider_message_id: message.id,
+      p_contact_wa_id: message.contactWaId,
+      p_context_provider_message_id: message.contextMessageId,
+      p_satisfaction: satisfaction,
+      p_response_text: message.textBody || message.responseKey || ''
+    })
+  });
+  const raw = await response.text();
+  let parsed = null;
+  try { parsed = raw ? JSON.parse(raw) : null; } catch {}
+  if (!response.ok) throw new Error(`Customer experience response failed (HTTP ${response.status}).`);
+  return { classified: true, satisfaction, ...(parsed || {}) };
 }
 
 export default async request => {
@@ -143,6 +193,10 @@ export default async request => {
     let unmatched = 0;
     let inserted = 0;
     let duplicates = 0;
+    let experienceClassified = 0;
+    let experienceMatched = 0;
+    let recoveryQueued = 0;
+    let reviewQueued = 0;
 
     for (const item of statuses) {
       const rows = await updateProviderStatus(item.id, item.status, item.timestamp, item.error);
@@ -152,8 +206,16 @@ export default async request => {
 
     for (const message of inboundMessages) {
       const result = await persistInboundMessage(message);
-      if (result?.inserted === true) inserted += 1;
-      else duplicates += 1;
+      if (result?.inserted === true) {
+        inserted += 1;
+        const experience = await recordExperienceResponse(message);
+        if (experience.classified) experienceClassified += 1;
+        if (experience.matched === true) experienceMatched += 1;
+        if (experience.action === 'recovery_queued') recoveryQueued += 1;
+        if (experience.action === 'review_queued') reviewQueued += 1;
+      } else {
+        duplicates += 1;
+      }
     }
 
     return json(200, {
@@ -163,7 +225,11 @@ export default async request => {
       statusRowsUnmatched: unmatched,
       messagesReceived: inboundMessages.length,
       messagesInserted: inserted,
-      messagesDuplicate: duplicates
+      messagesDuplicate: duplicates,
+      experienceResponsesClassified: experienceClassified,
+      experienceResponsesMatched: experienceMatched,
+      experienceRecoveriesQueued: recoveryQueued,
+      experienceReviewsQueued: reviewQueued
     });
   } catch (error) {
     console.error('WhatsApp webhook persistence failed:', error?.message || 'unknown');
@@ -174,8 +240,10 @@ export default async request => {
 export const __test = {
   verifySignature,
   updateProviderStatus,
+  inboundResponseFields,
   extractInboundMessages,
   persistInboundMessage,
+  recordExperienceResponse,
   serverHeaders,
   config
 };
