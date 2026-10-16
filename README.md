@@ -105,3 +105,4 @@ A CI também cria PostgreSQL efêmero e valida migrations, RLS, satisfação, re
 
 > Homologação outbound do backend concluída em 16/10/2026 com token de System User; uma única mensagem de teste foi aceita pela Cloud API e as travas foram restauradas.
 > Pré-produção permanece `disabled`, restrita ao Brasil (`55`) e preparada para `pt_BR`.
+> Runtime republicado após configurar `CUSTOMER_EXPERIENCE_ENABLED=false`; o módulo está instalado, porém não cria novas pesquisas até ativação explícita.
