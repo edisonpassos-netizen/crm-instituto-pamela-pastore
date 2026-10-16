@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Operação do CRM — Instituto Pâmela Pastore</title>
+<style>
+:root{--primary:#1A8690;--bg:#f4f7f7;--surface:#fff;--line:#dfe7e8;--text:#263238;--muted:#68777a;--ok:#287347;--warn:#8a5a00;--danger:#a13c3c;--shadow:0 8px 28px rgba(25,65,70,.08)}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}button,input{font:inherit}.top{background:var(--primary);color:#fff;padding:18px 22px}.top h1{margin:0;font-size:20px}.top p{margin:5px 0 0;opacity:.9}.wrap{max-width:1200px;margin:auto;padding:20px}.card{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px}.kpi span{display:block;font-size:12px;color:var(--muted)}.kpi b{display:block;font-size:28px;margin-top:6px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:9px 12px;border-radius:9px;font-weight:650;cursor:pointer;text-decoration:none}.btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}.status{display:inline-flex;padding:6px 10px;border-radius:20px;font-size:12px;font-weight:700;background:#eef8f2;color:var(--ok)}.status.warn{background:#fff5df;color:var(--warn)}.status.bad{background:#ffeded;color:var(--danger)}.muted{color:var(--muted)}.auth{max-width:430px;margin:50px auto}.auth form{display:grid;gap:12px}.hidden{display:none!important}label{font-size:12px;font-weight:700;color:#536164}input{width:100%;border:1px solid #cfdadb;border-radius:8px;padding:9px}.links{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.links a{display:block;border:1px solid var(--line);border-radius:11px;padding:16px;text-decoration:none;color:var(--text);background:#fff}.links b{display:block;margin-bottom:5px}.queue{display:grid;gap:8px}.queue-item{border:1px solid var(--line);border-radius:9px;padding:11px}.error{color:var(--danger)}@media(max-width:800px){.grid,.links{grid-template-columns:1fr 1fr}.wrap{padding:12px}}@media(max-width:520px){.grid,.links{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="top"><h1>Central operacional do CRM</h1><p>Instituto Pâmela Pastore • acompanhamento interno sem disparo de mensagens</p></header>
+<main class="wrap">
+<section id="authCard" class="card auth hidden"><h2>Acesso ao CRM</h2><p class="muted">Use a mesma senha do CRM oficial.</p><form id="loginForm"><label for="password">Senha</label><input id="password" type="password" autocomplete="current-password" required><div id="loginError" class="error"></div><button class="btn primary" type="submit">Entrar</button></form></section>
+<section id="app" class="hidden">
+<div class="card"><div class="toolbar"><button id="refresh" class="btn primary">Atualizar painel</button><span id="health" class="status">Verificando…</span><span id="updated" class="muted"></span></div><p class="muted">Este painel é apenas operacional. Ele não possui código de envio para WhatsApp ou Google.</p></div>
+<div id="kpis" class="grid"></div>
+<div class="card"><h2>Acessos operacionais</h2><div class="links"><a href="/"><b>CRM principal</b><span class="muted">Leads, funil, vendas e tarefas.</span></a><a href="/followups"><b>Fila de follow-ups</b><span class="muted">Contato manual e recuperação.</span></a><a href="/atendimentos"><b>Atendimentos</b><span class="muted">Registrar e concluir atendimentos.</span></a></div></div>
+<div class="card"><h2>Fila aguardando operador</h2><div id="queue" class="queue"><div class="muted">Carregando…</div></div></div>
+<div class="card"><h2>Controles de segurança</h2><p class="muted">O painel confirma conectividade e volume operacional, mas não expõe segredos nem habilita automações externas. A ativação do WhatsApp de produção continua separada e fail-closed.</p></div>
+</section>
+</main>
+<script>
+'use strict';
+const API='/.netlify/functions/crm-state';
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function request(url,options={}){const r=await fetch(url,{credentials:'same-origin',...options,headers:{Accept:'application/json',...(options.headers||{})}});const data=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(data.error||`Erro HTTP ${r.status}`);e.status=r.status;throw e}return data}
+async function api(action,options={}){return request(`${API}?action=${encodeURIComponent(action)}`,options)}
+function kpi(label,value){return `<div class="kpi"><span>${esc(label)}</span><b>${esc(value)}</b></div>`}
+async function load(){
+  $('health').textContent='Verificando…';$('health').className='status';
+  const [health,state,queue]=await Promise.all([api('health'),request(API),api('automation-queue')]);
+  const s=state.data&&typeof state.data==='object'?state.data:{};const leads=Array.isArray(s.leads)?s.leads:[];const tasks=Array.isArray(s.tasks)?s.tasks:[];const sales=Array.isArray(s.sales)?s.sales:[];const attendances=Array.isArray(s.attendances)?s.attendances:[];const items=Array.isArray(queue.items)?queue.items:[];
+  const pending=tasks.filter(t=>t&&t.done!==true).length;const completed=attendances.filter(a=>a?.status==='Concluído').length;const recoveries=items.filter(i=>i?.event_type==='service_recovery_required').length;
+  $('kpis').innerHTML=[kpi('Leads',leads.length),kpi('Follow-ups pendentes',pending),kpi('Atendimentos concluídos',completed),kpi('Aguardando operador',items.length),kpi('Recuperações abertas',recoveries),kpi('Vendas registradas',sales.length),kpi('Revisão do estado',state.revision||'-'),kpi('Banco exclusivo',health.databaseProjectRef==='dxfzuxybubvnjertiowf'?'OK':'Verificar')].join('');
+  $('queue').innerHTML=items.length?items.map(item=>{const d=item.payload?.dispatch||{};return `<div class="queue-item"><b>${item.event_type==='service_recovery_required'?'Recuperação':'Follow-up'}</b> • ${esc(d.lead_name||'Cliente')}<br><span class="muted">${esc(d.task_date||'')}${d.task_time?' • '+esc(d.task_time):''}${d.service_name?' • '+esc(d.service_name):''}</span></div>`}).join(''):'<div class="muted">Nenhuma tarefa aguardando operador.</div>';
+  $('health').textContent='Banco e API disponíveis';$('health').className='status';$('updated').textContent='Atualizado agora';
+}
+async function boot(){try{await api('session');$('authCard').classList.add('hidden');$('app').classList.remove('hidden');await load()}catch(e){$('app').classList.add('hidden');$('authCard').classList.remove('hidden');if(e.status!==401)$('loginError').textContent=e.message}}
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;$('loginError').textContent='';try{await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});$('password').value='';await boot()}catch(err){$('loginError').textContent=err.message}finally{b.disabled=false}});
+$('refresh').addEventListener('click',async()=>{try{await load()}catch(e){$('health').textContent='Falha de conexão';$('health').className='status bad';$('updated').textContent=e.message}});
+boot();
+</script>
+</body>
+</html>

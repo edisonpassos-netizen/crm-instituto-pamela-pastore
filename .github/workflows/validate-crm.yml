@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: 24
       - name: Check Netlify function syntax
-        run: node --check netlify/functions/crm-state.mjs && node --check netlify/functions/automation-worker.mjs && node --check netlify/functions/whatsapp-status-webhook.mjs && node --check netlify/functions/lib/automation-enqueue.mjs
+        run: node --check netlify/functions/crm-state.mjs && node --check netlify/functions/automation-worker.mjs && node --check netlify/functions/followup-reconciler.mjs && node --check netlify/functions/whatsapp-status-webhook.mjs && node --check netlify/functions/lib/automation-enqueue.mjs
       - name: Test database isolation and CRM behavior
         run: node --test tests/*.test.mjs
       - name: Check inline JavaScript syntax

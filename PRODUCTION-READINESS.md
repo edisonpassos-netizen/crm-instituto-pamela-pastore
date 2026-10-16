@@ -28,8 +28,10 @@ Nenhuma etapa deste documento autoriza migração do número oficial, envio real
 - `delivery_unknown` para resultado ambíguo; sem reenvio automático.
 - Webhook Meta com validação HMAC, deduplicação inbound e persistência de status.
 - Fluxo de experiência, recuperação e convite neutro ao Google.
-- Follow-ups novos do CRM principal enfileirados transacionalmente em canal interno.
+- Novos follow-ups do CRM principal são enfileirados atomicamente pelo banco na mesma transação que persiste o estado, sempre em canal interno e com validação da origem.
+- `followup-reconciler` funciona como backstop idempotente para follow-ups legados/abertos que eventualmente não possuam fila, sem envio externo.
 - Rota `/atendimentos` para registrar conclusão real e autorização explícita de acompanhamento.
+- Rota `/operacao` para acompanhar estado do CRM, atendimentos e itens aguardando operador sem expor segredos nem enviar mensagens.
 - CI em Node 24 e PostgreSQL 16 efêmero.
 - CSP, HSTS, anti-framing e demais headers de segurança do frontend.
 
@@ -105,7 +107,7 @@ Nas primeiras horas/dias de produção, acompanhar pelo menos:
 - recuperações aguardando operador;
 - convites de avaliação preparados/enviados;
 - HTTP 4xx/5xx das Netlify Functions;
-- saúde do worker agendado;
+- saúde do `automation-worker` e do `followup-reconciler` agendados;
 - revisão do estado principal após operações concorrentes.
 
 ## Itens explicitamente fora de escopo automático neste momento
