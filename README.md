@@ -24,9 +24,12 @@ Não use o mesmo valor para a senha e o segredo de sessão. Configure valores se
 Enquanto canais externos não estiverem liberados, mantenha:
 - `INTERNAL_AUTOMATIONS_ENABLED=true`
 - `AUTOMATIONS_ENABLED=false`
+- `CUSTOMER_EXPERIENCE_ENABLED=false` — impede inclusive a criação de novas pesquisas/fila enquanto a implantação não estiver homologada.
 - `WHATSAPP_TEST_MODE=false`
 - `WHATSAPP_OUTBOUND_MODE=disabled`
 - `WHATSAPP_PRODUCTION_ENABLED=false`
+
+Com `CUSTOMER_EXPERIENCE_ENABLED=false`, um evento futuro de atendimento concluído é aceito como no-op e **não cria** `crm_customer_experience` nem fila externa. Isso evita acumular pesquisas antigas que poderiam disparar quando o canal fosse ligado posteriormente.
 
 Quando somente a automação interna está habilitada, o worker reivindica exclusivamente `channel='internal'`; WhatsApp e Google Review permanecem fora do claim.
 
@@ -46,7 +49,7 @@ O estado durável vive em `crm_customer_experience`. Envios de pesquisa e avalia
 O link oficial do Google vem de `crm_app_state.data.settings.reviewUrl`; ele é lido novamente antes de cada convite, evitando URL antiga na fila.
 
 ## Templates de produção
-O modo de produção é separado da homologação. Além de `AUTOMATIONS_ENABLED=true`, exige `WHATSAPP_OUTBOUND_MODE=production` e `WHATSAPP_PRODUCTION_ENABLED=true`.
+O modo de produção é separado da homologação. Além de `CUSTOMER_EXPERIENCE_ENABLED=true` e `AUTOMATIONS_ENABLED=true`, exige `WHATSAPP_OUTBOUND_MODE=production` e `WHATSAPP_PRODUCTION_ENABLED=true`.
 
 Variáveis:
 - `WHATSAPP_PRODUCTION_PHONE_NUMBER_ID` — Phone Number ID oficial, ainda não deve ser configurado até a estratégia segura do número em uso ser homologada.
@@ -90,10 +93,10 @@ Execute:
 
 `node --test tests/*.test.mjs`
 
-A CI também cria PostgreSQL efêmero e valida migrations, RLS, satisfação, recuperação, convite pós-recuperação e idempotência antes de qualquer aplicação no banco oficial.
+A CI também cria PostgreSQL efêmero e valida migrations, RLS, satisfação, recuperação, convite pós-recuperação, idempotência e o feature gate antes de qualquer ativação.
 
 ## Antes de ativar dados reais
-- manter todas as travas externas desligadas;
+- manter todas as travas externas e `CUSTOMER_EXPERIENCE_ENABLED` desligadas;
 - criar e aprovar os templates reais em português;
 - definir a estratégia segura para o número oficial já em uso;
 - homologar o Phone Number ID oficial sem interromper WhatsApp Business;
