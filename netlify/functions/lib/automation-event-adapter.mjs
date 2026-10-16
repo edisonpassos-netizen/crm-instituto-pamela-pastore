@@ -36,16 +36,16 @@ export function toAutomationCommand(event) {
 
   if (event.type === 'service_completed') {
     if (sourceType !== 'attendance') throw new Error('Service completion event requires sourceType=attendance.');
-    // The event is only a request to evaluate server-side eligibility. Contact
-    // details, consent and the review URL must be loaded from persisted CRM state.
+    // Contact details and consent are loaded again from the persisted CRM state
+    // before an experience record or WhatsApp queue item can be created.
     return {
-      dedupe_key: `crm:service_completed:attendance:${sourceId}`,
-      event_type: 'service_completed',
+      dedupe_key: `crm:satisfaction_request:attendance:${sourceId}`,
+      event_type: 'satisfaction_request',
       source_type: 'attendance',
       source_id: sourceId,
       recipient_phone: null,
       payload: { attendance_id: sourceId, occurred_at: occurredAt.toISOString() },
-      channel: 'google_review',
+      channel: 'whatsapp',
       scheduled_at: occurredAt.toISOString(),
       max_attempts: 3
     };
