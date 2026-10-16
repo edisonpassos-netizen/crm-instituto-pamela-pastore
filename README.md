@@ -54,9 +54,9 @@ O modo de produção é separado da homologação. Além de `CUSTOMER_EXPERIENCE
 Variáveis:
 - `WHATSAPP_PRODUCTION_PHONE_NUMBER_ID` — Phone Number ID oficial, ainda não deve ser configurado até a estratégia segura do número em uso ser homologada.
 - `WHATSAPP_PRODUCTION_ALLOWED_COUNTRY_CODES=55`
-- `WHATSAPP_PRODUCTION_SATISFACTION_TEMPLATE_NAME`
+- `WHATSAPP_PRODUCTION_SATISFACTION_TEMPLATE_NAME=pesquisa_experiencia_pos_atendimento_v1`
 - `WHATSAPP_PRODUCTION_SATISFACTION_TEMPLATE_LANGUAGE=pt_BR`
-- `WHATSAPP_PRODUCTION_REVIEW_TEMPLATE_NAME`
+- `WHATSAPP_PRODUCTION_REVIEW_TEMPLATE_NAME=avaliacao_google_pos_atendimento_v1`
 - `WHATSAPP_PRODUCTION_REVIEW_TEMPLATE_LANGUAGE=pt_BR`
 - `WHATSAPP_PRODUCTION_TEMPLATE_NAME` / `WHATSAPP_PRODUCTION_TEMPLATE_LANGUAGE` para outros casos futuros.
 
@@ -106,3 +106,4 @@ A CI também cria PostgreSQL efêmero e valida migrations, RLS, satisfação, re
 > Homologação outbound do backend concluída em 16/10/2026 com token de System User; uma única mensagem de teste foi aceita pela Cloud API e as travas foram restauradas.
 > Pré-produção permanece `disabled`, restrita ao Brasil (`55`) e preparada para `pt_BR`.
 > Runtime republicado após configurar `CUSTOMER_EXPERIENCE_ENABLED=false`; o módulo está instalado, porém não cria novas pesquisas até ativação explícita.
+> Templates de produção pré-configurados no Netlify em 16/10/2026: `pesquisa_experiencia_pos_atendimento_v1` e `avaliacao_google_pos_atendimento_v1`, ambos `pt_BR`.
