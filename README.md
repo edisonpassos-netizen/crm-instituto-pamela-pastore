@@ -85,3 +85,4 @@ Execute `node --test tests/*.test.mjs` para conferir o destino, a rejeição de 
 Mudanças de banco ou credenciais em produção devem preservar o isolamento do CRM, validar leitura/gravação e manter rollback disponível antes de revogar qualquer credencial anterior. Não revogue credenciais compartilhadas sem identificar seus outros consumidores.
 
 > Homologação do envio outbound pelo backend concluída com sucesso em 16/10/2026 usando token de System User; uma única mensagem de teste foi aceita pela Cloud API e as travas externas foram restauradas imediatamente após o resultado.
+> Após a integração do modo de produção separado, o runtime foi republicado com `WHATSAPP_OUTBOUND_MODE=disabled` e `WHATSAPP_PRODUCTION_ENABLED=false`.
