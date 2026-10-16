@@ -177,7 +177,13 @@ async function sendWhatsAppTemplate(job) {
     error.status = response.status;
     throw error;
   }
-  return body?.messages?.[0]?.id || null;
+  const providerMessageId = String(body?.messages?.[0]?.id || '').trim();
+  if (!providerMessageId) {
+    const error = new Error('Resultado de envio indeterminado: a API respondeu com sucesso sem identificador da mensagem; não repetir automaticamente.');
+    error.code = 'DELIVERY_UNKNOWN';
+    throw error;
+  }
+  return providerMessageId;
 }
 
 async function logAttempt(job, outcome, detail = null, providerMessageId = null) {
