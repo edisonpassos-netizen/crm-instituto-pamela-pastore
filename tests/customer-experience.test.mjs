@@ -5,6 +5,7 @@ import { resolveWhatsAppOutboundConfig } from '../netlify/functions/lib/whatsapp
 
 test('customer experience classifier recognizes only explicit supported answers', () => {
   assert.equal(classifyCustomerExperienceResponse({ responseKey: 'experience_very_good', textBody: 'Muito boa' }), 'very_good');
+  assert.equal(classifyCustomerExperienceResponse({ textBody: 'Excelente' }), 'very_good', 'visible Meta quick-reply label must remain a safe fallback alias');
   assert.equal(classifyCustomerExperienceResponse({ responseKey: 'experience_good', textBody: 'Boa' }), 'good');
   assert.equal(classifyCustomerExperienceResponse({ responseKey: 'experience_needs_improvement', textBody: 'Poderia melhorar' }), 'needs_improvement');
   assert.equal(classifyCustomerExperienceResponse({ textBody: 'Poderia melhorar' }), 'needs_improvement');
