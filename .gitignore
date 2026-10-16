@@ -1,0 +1,29 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Dependencies and build output
+node_modules/
+.netlify/
+dist/
+coverage/
+
+# Local/editor/OS artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+
+# Local backups and exports that may contain customer data
+*Backup*.json
+*backup*.json
+*Leads*.csv
+*Leads*.xlsx
+*.sqlite
+*.db
