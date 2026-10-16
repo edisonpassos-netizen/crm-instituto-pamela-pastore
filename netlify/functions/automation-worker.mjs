@@ -44,48 +44,79 @@ function retryDelaySeconds(attempt) {
 }
 
 function isReviewEligible(job) {
-  const p = job?.payload || {};
-  return job?.event_type === 'service_completed'
-    && p.attendance_status === 'completed'
-    && p.customer_opt_in === true
-    && typeof p.google_review_url === 'string'
-    && /^https:\/\//i.test(p.google_review_url)
-    && Boolean(job.recipient_phone);
+  return job?.event_type === 'review_invitation'
+    && job?.channel === 'google_review'
+    && job?.source_type === 'customer_experience'
+    && Boolean(job?.source_id)
+    && Boolean(job?.recipient_phone);
+}
+
+async function getExperience(job) {
+  const id = String(job?.source_id || job?.payload?.experience_id || '').trim();
+  if (!id) return null;
+  const rows = await dbRequest(`crm_customer_experience?id=eq.${encodeURIComponent(id)}&select=*`, 'GET');
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function verifySatisfactionRequest(job) {
+  if (job?.event_type !== 'satisfaction_request' || job?.channel !== 'whatsapp' || job?.source_type !== 'customer_experience') {
+    return { ok: false, reason: 'Evento de satisfação inválido.' };
+  }
+  const experience = await getExperience(job);
+  if (!experience || experience.status !== 'pending_send') {
+    return { ok: false, reason: 'Experiência não está pendente de envio.' };
+  }
+  const currentPhone = String(experience.recipient_phone || '').replace(/\D/g, '');
+  const queuedPhone = String(job?.recipient_phone || '').replace(/\D/g, '');
+  if (!currentPhone || currentPhone !== queuedPhone || job?.payload?.customer_opt_in !== true) {
+    return { ok: false, reason: 'Telefone ou consentimento da experiência não corresponde ao registro atual.' };
+  }
+  return { ok: true, experience };
+}
+
+async function prepareReviewInvitation(job) {
+  if (!isReviewEligible(job)) return { ok: false, reason: 'Evento de avaliação inválido.' };
+  const experience = await getExperience(job);
+  if (!experience || experience.status !== 'review_pending') {
+    return { ok: false, reason: 'Experiência não está liberada para convite de avaliação.' };
+  }
+  const currentPhone = String(experience.recipient_phone || '').replace(/\D/g, '');
+  const queuedPhone = String(job?.recipient_phone || '').replace(/\D/g, '');
+  if (!currentPhone || currentPhone !== queuedPhone) {
+    return { ok: false, reason: 'Telefone do convite não corresponde à experiência registrada.' };
+  }
+  const rows = await dbRequest('crm_app_state?id=eq.main&select=data', 'GET');
+  const data = Array.isArray(rows) ? rows[0]?.data : null;
+  let currentUrl;
+  try { currentUrl = new URL(String(data?.settings?.reviewUrl || '').trim()); } catch {}
+  if (!currentUrl || currentUrl.protocol !== 'https:') {
+    return { ok: false, reason: 'Link oficial de avaliação do Google não está configurado.' };
+  }
+  const firstName = String(experience.first_name || job?.payload?.first_name || 'Cliente').trim().split(/\s+/)[0] || 'Cliente';
+  return {
+    ok: true,
+    experience,
+    sendJob: {
+      ...job,
+      payload: {
+        ...(job.payload || {}),
+        experience_id: String(experience.id),
+        first_name: firstName,
+        google_review_url: currentUrl.toString(),
+        template_parameters: [firstName, currentUrl.toString()]
+      }
+    }
+  };
 }
 
 async function verifyReviewAgainstStoredState(job) {
-  const rows = await dbRequest('crm_app_state?id=eq.main&select=data', 'GET');
-  const data = Array.isArray(rows) ? rows[0]?.data : null;
-  const attendanceId = String(job?.payload?.attendance_id || job?.source_id || '');
-  const attendance = Array.isArray(data?.attendances)
-    ? data.attendances.find(item => String(item?.id || '') === attendanceId)
-    : null;
-  if (!attendance || attendance.status !== 'Concluído' || attendance.reviewConsent !== true || !attendance.consentAt) {
-    return { ok: false, reason: 'Atendimento não está concluído ou não há consentimento registrado no CRM.' };
-  }
-  const lead = Array.isArray(data?.leads)
-    ? data.leads.find(item => String(item?.id || '') === String(attendance.leadId || ''))
-    : null;
-  const currentPhone = String(lead?.phone || '').replace(/\D/g, '');
-  const queuedPhone = String(job?.recipient_phone || '').replace(/\D/g, '');
-  if (!lead || !currentPhone || currentPhone !== queuedPhone) {
-    return { ok: false, reason: 'Telefone do cliente não corresponde ao estado atual do CRM.' };
-  }
-  let currentUrl;
-  try { currentUrl = new URL(String(data?.settings?.reviewUrl || '').trim()); } catch {}
-  if (!currentUrl || currentUrl.protocol !== 'https:' || currentUrl.toString() !== String(job?.payload?.google_review_url || '')) {
-    return { ok: false, reason: 'Link oficial de avaliação não corresponde à configuração atual do CRM.' };
-  }
-  if (String(attendance.consentAt) !== String(job?.payload?.consent_at || '')) {
-    return { ok: false, reason: 'Registro de consentimento mudou após o pedido entrar na fila.' };
-  }
-  return { ok: true, lead, attendance };
+  return prepareReviewInvitation(job);
 }
 
 function reviewMessage(job) {
-  const firstName = String(job.payload?.first_name || '').trim().split(/\s+/)[0] || 'tudo bem';
-  const link = job.payload.google_review_url;
-  return `Olá, ${firstName}! Obrigado por escolher o Instituto Pâmela Pastore. Se desejar, conte como foi sua experiência neste link: ${link} Sua opinião nos ajuda a melhorar. Obrigado!`;
+  const firstName = String(job.payload?.first_name || '').trim().split(/\s+/)[0] || 'Cliente';
+  const link = job.payload?.google_review_url || '';
+  return `Olá, ${firstName}! Se desejar compartilhar sua experiência com o Instituto Pâmela Pastore, este é o nosso link oficial de avaliação: ${link}`;
 }
 
 async function sendWhatsAppTemplate(job) {
@@ -156,120 +187,167 @@ async function updateJob(job, patch) {
   if (!response.ok) throw new Error(`Falha ao atualizar fila (HTTP ${response.status}).`);
 }
 
+async function completeExperienceSend(job, providerMessageId) {
+  let result;
+  try {
+    result = await dbRequest('rpc/complete_customer_experience_send', 'POST', {
+      p_queue_id: job.id,
+      p_provider_message_id: providerMessageId,
+      p_kind: job.event_type
+    });
+  } catch (cause) {
+    const error = new Error('Mensagem aceita pelo WhatsApp, mas a confirmação interna falhou; não repetir automaticamente.');
+    error.code = 'DELIVERY_UNKNOWN';
+    error.cause = cause;
+    throw error;
+  }
+  if (result?.conflict) {
+    const error = new Error('Mensagem aceita pelo WhatsApp, mas o estado interno mudou; não repetir automaticamente.');
+    error.code = 'DELIVERY_UNKNOWN';
+    throw error;
+  }
+  try {
+    await logAttempt(job, 'succeeded', 'Aceito pela API oficial do WhatsApp e conciliado com a experiência.', providerMessageId);
+  } catch (logError) {
+    console.error('automation attempt log failed after finalized experience send:', logError?.message || 'unknown');
+  }
+}
+
+async function handleServiceRecovery(job) {
+  const result = await dbRequest('rpc/prepare_customer_experience_recovery', 'POST', { p_queue_id: job.id });
+  if (result?.conflict) {
+    const detail = 'Recuperação não corresponde mais ao estado atual da experiência.';
+    await logAttempt(job, 'skipped', detail);
+    await updateJob(job, { status: 'cancelled', locked_at: null, last_error: detail });
+    return;
+  }
+  try {
+    await logAttempt(job, 'succeeded', 'Caso de experiência encaminhado para atendimento humano da recepção.');
+  } catch (logError) {
+    console.error('service recovery attempt log failed:', logError?.message || 'unknown');
+  }
+}
+
+async function handleLeadFollowUp(job) {
+  const rows = await dbRequest('crm_app_state?id=eq.main&select=data', 'GET');
+  const data = Array.isArray(rows) ? rows[0]?.data : null;
+  const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+  const exists = tasks.some(task => String(task?.id || '') === String(job.source_id));
+  if (!exists) {
+    const detail = 'Follow-up não encontrado no estado persistido do CRM; verificar sincronização.';
+    await logAttempt(job, 'failed', detail);
+    await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
+    return;
+  }
+  const task = tasks.find(item => String(item?.id || '') === String(job.source_id));
+  if (!task) {
+    const detail = 'Follow-up não encontrado no estado persistido do CRM; verificar sincronização.';
+    await logAttempt(job, 'failed', detail);
+    await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
+    return;
+  }
+  if (task.done === true) {
+    const detail = 'Follow-up já concluído no CRM; nenhuma ação adicional necessária.';
+    await logAttempt(job, 'skipped', detail);
+    await updateJob(job, { status: 'cancelled', locked_at: null, last_error: detail });
+    return;
+  }
+  const taskDate = String(task.date || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(taskDate) || !Number.isFinite(Date.parse(taskDate + 'T12:00:00.000Z'))) {
+    const detail = 'Data do follow-up ausente ou inválida; corrigir a tarefa no CRM.';
+    await logAttempt(job, 'failed', detail);
+    await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
+    return;
+  }
+  const lead = Array.isArray(data?.leads)
+    ? data.leads.find(item => String(item?.id || '') === String(task.leadId || ''))
+    : null;
+  if (!lead) {
+    const detail = 'Lead associado ao follow-up não encontrado no CRM.';
+    await logAttempt(job, 'failed', detail);
+    await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
+    return;
+  }
+  const phone = String(lead.phone || '').replace(/\D/g, '');
+  if (phone.length < 10 || phone.length > 15) {
+    const detail = 'Telefone do lead ausente ou inválido; follow-up requer ação manual após corrigir o cadastro.';
+    await logAttempt(job, 'failed', detail);
+    await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
+    return;
+  }
+  const dueAt = new Date(taskDate + 'T12:00:00.000Z');
+  if (dueAt.getTime() > Date.now()) {
+    const detail = 'Follow-up validado e reagendado para a data cadastrada no CRM.';
+    await logAttempt(job, 'succeeded', detail);
+    await updateJob(job, {
+      status: 'pending', scheduled_at: dueAt.toISOString(), locked_at: null,
+      last_error: null,
+      payload: { ...(job.payload || {}), task_date: taskDate, lead_id: String(lead.id), lead_name: String(lead.name || '') }
+    });
+    return;
+  }
+  const detail = 'Follow-up validado e pronto para atendimento manual; nenhuma mensagem foi enviada automaticamente.';
+  await logAttempt(job, 'succeeded', detail);
+  await updateJob(job, {
+    status: 'awaiting_operator', locked_at: null, last_error: null,
+    payload: {
+      ...(job.payload || {}),
+      dispatch: {
+        state: 'ready_for_manual_contact',
+        task_id: String(task.id),
+        lead_id: String(lead.id),
+        lead_name: String(lead.name || ''),
+        recipient_phone: phone,
+        task_date: taskDate,
+        task_type: String(task.type || ''),
+        note: String(task.note || '').slice(0, 500),
+        prepared_at: new Date().toISOString()
+      }
+    }
+  });
+}
+
 async function processJob(job) {
   try {
-    if (job.channel === 'google_review') {
-      if (!isReviewEligible(job)) {
-        await logAttempt(job, 'skipped', 'Atendimento não elegível para solicitação de avaliação.');
-        await updateJob(job, { status: 'cancelled', locked_at: null, last_error: 'Atendimento não elegível.' });
+    if (job.channel === 'internal') {
+      if (job.event_type === 'service_recovery_required' && job.source_type === 'customer_experience') {
+        await handleServiceRecovery(job);
         return;
       }
-      const verification = await verifyReviewAgainstStoredState(job);
+      if (job.event_type === 'lead_follow_up_requested' && job.source_type === 'task' && job.source_id) {
+        await handleLeadFollowUp(job);
+        return;
+      }
+      const detail = 'Evento interno ainda não possui um reconciliador implementado.';
+      await logAttempt(job, 'failed', detail);
+      await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
+      return;
+    }
+
+    if (job.event_type === 'satisfaction_request') {
+      const verification = await verifySatisfactionRequest(job);
       if (!verification.ok) {
         await logAttempt(job, 'skipped', verification.reason);
         await updateJob(job, { status: 'cancelled', locked_at: null, last_error: verification.reason });
         return;
       }
-    }
-
-    if (job.channel === 'internal') {
-      // A follow-up is created by the CRM before its event is enqueued.
-      // Reconcile against the durable CRM snapshot instead of creating a
-      // duplicate task or mutating the whole-state document from the worker.
-      if (job.event_type !== 'lead_follow_up_requested' ||
-          job.source_type !== 'task' || !job.source_id) {
-        const detail = 'Evento interno ainda não possui um reconciliador implementado.';
-        await logAttempt(job, 'failed', detail);
-        await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
-        return;
-      }
-      const rows = await dbRequest('crm_app_state?id=eq.main&select=data', 'GET');
-      const data = Array.isArray(rows) ? rows[0]?.data : null;
-      const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
-      const exists = tasks.some(task => String(task?.id || '') === String(job.source_id));
-      if (!exists) {
-        const detail = 'Follow-up não encontrado no estado persistido do CRM; verificar sincronização.';
-        await logAttempt(job, 'failed', detail);
-        await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
-        return;
-      }
-      const task = tasks.find(item => String(item?.id || '') === String(job.source_id));
-      if (!task) {
-        const detail = 'Follow-up não encontrado no estado persistido do CRM; verificar sincronização.';
-        await logAttempt(job, 'failed', detail);
-        await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
-        return;
-      }
-      if (task.done === true) {
-        const detail = 'Follow-up já concluído no CRM; nenhuma ação adicional necessária.';
-        await logAttempt(job, 'skipped', detail);
-        await updateJob(job, { status: 'cancelled', locked_at: null, last_error: detail });
-        return;
-      }
-      const taskDate = String(task.date || '');
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(taskDate) ||
-          !Number.isFinite(Date.parse(taskDate + 'T12:00:00.000Z'))) {
-        const detail = 'Data do follow-up ausente ou inválida; corrigir a tarefa no CRM.';
-        await logAttempt(job, 'failed', detail);
-        await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
-        return;
-      }
-      const lead = Array.isArray(data?.leads)
-        ? data.leads.find(item => String(item?.id || '') === String(task.leadId || ''))
-        : null;
-      if (!lead) {
-        const detail = 'Lead associado ao follow-up não encontrado no CRM.';
-        await logAttempt(job, 'failed', detail);
-        await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
-        return;
-      }
-      const phone = String(lead.phone || '').replace(/\D/g, '');
-      if (phone.length < 10 || phone.length > 15) {
-        const detail = 'Telefone do lead ausente ou inválido; follow-up requer ação manual após corrigir o cadastro.';
-        await logAttempt(job, 'failed', detail);
-        await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
-        return;
-      }
-      const dueAt = new Date(taskDate + 'T12:00:00.000Z');
-      if (dueAt.getTime() > Date.now()) {
-        const detail = 'Follow-up validado e reagendado para a data cadastrada no CRM.';
-        await logAttempt(job, 'succeeded', detail);
-        await updateJob(job, {
-          status: 'pending', scheduled_at: dueAt.toISOString(), locked_at: null,
-          last_error: null,
-          payload: { ...(job.payload || {}), task_date: taskDate, lead_id: String(lead.id), lead_name: String(lead.name || '') }
-        });
-        return;
-      }
-      // Queue the validated task for an operator; this path intentionally does
-      // not contact the lead or claim that a WhatsApp message was sent.
-      const detail = 'Follow-up validado e pronto para atendimento manual; nenhuma mensagem foi enviada automaticamente.';
-      await logAttempt(job, 'succeeded', detail);
-      await updateJob(job, {
-        status: 'awaiting_operator', locked_at: null, last_error: null,
-        payload: {
-          ...(job.payload || {}),
-          dispatch: {
-            state: 'ready_for_manual_contact',
-            task_id: String(task.id),
-            lead_id: String(lead.id),
-            lead_name: String(lead.name || ''),
-            recipient_phone: phone,
-            task_date: taskDate,
-            task_type: String(task.type || ''),
-            note: String(task.note || '').slice(0, 500),
-            prepared_at: new Date().toISOString()
-          }
-        }
-      });
+      const providerMessageId = await sendWhatsAppTemplate(job);
+      await completeExperienceSend(job, providerMessageId);
       return;
     }
 
-    // The adapter emits service_completed for this channel. Eligibility and
-    // persisted consent are checked above; keep the channel/event contract aligned.
-    if (job.channel === 'google_review' && job.event_type !== 'service_completed') {
-      throw new Error('Canal de avaliação exige evento service_completed.');
+    if (job.channel === 'google_review') {
+      const verification = await prepareReviewInvitation(job);
+      if (!verification.ok) {
+        await logAttempt(job, 'skipped', verification.reason);
+        await updateJob(job, { status: 'cancelled', locked_at: null, last_error: verification.reason });
+        return;
+      }
+      const providerMessageId = await sendWhatsAppTemplate(verification.sendJob);
+      await completeExperienceSend(job, providerMessageId);
+      return;
     }
+
     const providerMessageId = await sendWhatsAppTemplate(job);
     await logAttempt(job, 'succeeded', 'Aceito pela API oficial do WhatsApp.', providerMessageId);
     await updateJob(job, {
@@ -329,4 +407,18 @@ export default async () => {
   }
 };
 
-export const __test = { retryDelaySeconds, isReviewEligible, reviewMessage, verifyReviewAgainstStoredState, processJob, sendWhatsAppTemplate, serverHeaders, supabaseConfig };
+export const __test = {
+  retryDelaySeconds,
+  isReviewEligible,
+  reviewMessage,
+  verifyReviewAgainstStoredState,
+  verifySatisfactionRequest,
+  prepareReviewInvitation,
+  completeExperienceSend,
+  handleServiceRecovery,
+  processJob,
+  sendWhatsAppTemplate,
+  serverHeaders,
+  supabaseConfig,
+  getExperience
+};
