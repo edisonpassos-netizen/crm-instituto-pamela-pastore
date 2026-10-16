@@ -119,6 +119,28 @@ function reviewMessage(job) {
   return `Olá, ${firstName}! Se desejar compartilhar sua experiência com o Instituto Pâmela Pastore, este é o nosso link oficial de avaliação: ${link}`;
 }
 
+function templateComponents(job) {
+  const p = job?.payload || {};
+  const components = [];
+  if (Array.isArray(p.template_parameters) && p.template_parameters.length) {
+    components.push({
+      type: 'body',
+      parameters: p.template_parameters.map(value => ({ type: 'text', text: String(value).slice(0, 500) }))
+    });
+  }
+  if (job?.event_type === 'satisfaction_request') {
+    ['experience_very_good', 'experience_good', 'experience_needs_improvement'].forEach((payload, index) => {
+      components.push({
+        type: 'button',
+        sub_type: 'quick_reply',
+        index: String(index),
+        parameters: [{ type: 'payload', payload }]
+      });
+    });
+  }
+  return components;
+}
+
 async function sendWhatsAppTemplate(job) {
   const {
     token,
@@ -129,14 +151,7 @@ async function sendWhatsAppTemplate(job) {
     to
   } = resolveWhatsAppOutboundConfig(job, process.env);
 
-  const p = job.payload || {};
-  const components = [];
-  if (p.template_parameters && Array.isArray(p.template_parameters) && p.template_parameters.length) {
-    components.push({
-      type: 'body',
-      parameters: p.template_parameters.map(value => ({ type: 'text', text: String(value).slice(0, 500) }))
-    });
-  }
+  const components = templateComponents(job);
   let response;
   try {
     response = await fetch(`https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`, {
@@ -370,7 +385,6 @@ async function processJob(job) {
   }
 }
 
-// A five-minute cadence is sufficient for dated commercial follow-ups and avoids unnecessary production invocations.
 export const config = { schedule: '*/5 * * * *' };
 
 export default async () => {
@@ -414,6 +428,7 @@ export const __test = {
   verifyReviewAgainstStoredState,
   verifySatisfactionRequest,
   prepareReviewInvitation,
+  templateComponents,
   completeExperienceSend,
   handleServiceRecovery,
   processJob,
