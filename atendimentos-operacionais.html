@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atendimentos — Instituto Pâmela Pastore</title>
+<style>
+:root{--primary:#1A8690;--primary-dark:#126B73;--bg:#f4f7f7;--surface:#fff;--line:#dfe7e8;--text:#263238;--muted:#68777a;--danger:#c94b4b;--success:#2e8b57;--warning:#b9770e;--shadow:0 8px 28px rgba(25,65,70,.08)}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}button,input,select,textarea{font:inherit}.top{background:var(--primary);color:#fff;padding:18px 22px}.top h1{margin:0;font-size:20px}.top p{margin:5px 0 0;opacity:.9}.wrap{max-width:1200px;margin:auto;padding:20px}.card{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:9px 12px;border-radius:9px;font-weight:650;cursor:pointer;text-decoration:none}.btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}.btn.primary:hover{background:var(--primary-dark)}.btn.danger{color:#a93636}.btn:disabled{opacity:.55;cursor:not-allowed}.muted{color:var(--muted)}.status{display:inline-flex;padding:6px 10px;border-radius:20px;font-size:12px;font-weight:700;background:#eef8f2;color:var(--success)}.badge{display:inline-flex;padding:4px 8px;border-radius:20px;font-size:11px;font-weight:800;background:#eef3f3;color:#456}.badge.ok{background:#eaf7ef;color:#287347}.badge.cancel{background:#ffeded;color:#a13c3c}.badge.warn{background:#fff4df;color:var(--warning)}.error{color:var(--danger)}.success{color:var(--success)}.empty{padding:28px;text-align:center;color:var(--muted)}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{color:var(--muted);font-size:11px;text-transform:uppercase}input,select,textarea{width:100%;border:1px solid #cfdadb;border-radius:8px;padding:9px;background:#fff;color:var(--text)}label{font-size:12px;font-weight:700;color:#536164;display:block;margin-bottom:5px}.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.full{grid-column:1/-1}.auth{max-width:430px;margin:50px auto}.auth form{display:grid;gap:12px}.hidden{display:none!important}.modal-back{position:fixed;inset:0;background:rgba(16,40,42,.45);display:none;align-items:center;justify-content:center;padding:20px;z-index:10}.modal{background:#fff;border-radius:14px;width:min(620px,100%);padding:20px;box-shadow:var(--shadow)}.check{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:12px}.check input{width:auto;margin-top:2px}.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.kpi{border:1px solid var(--line);border-radius:10px;padding:12px}.kpi b{display:block;font-size:24px;margin-top:4px}@media(max-width:700px){.wrap{padding:12px}.form-grid,.kpis{grid-template-columns:1fr}th,td{white-space:normal;min-width:120px}}
+</style>
+</head>
+<body>
+<header class="top"><h1>Atendimentos</h1><p>Instituto Pâmela Pastore • origem segura para o fluxo de experiência do cliente</p></header>
+<main class="wrap">
+  <section id="authCard" class="card auth hidden">
+    <h2>Acesso ao CRM</h2>
+    <p class="muted">Use a mesma senha do CRM oficial.</p>
+    <form id="loginForm">
+      <div><label for="password">Senha</label><input id="password" type="password" autocomplete="current-password" required></div>
+      <div id="loginError" class="error" role="alert"></div>
+      <button class="btn primary" type="submit">Entrar</button>
+    </form>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="card">
+      <div class="toolbar">
+        <button id="refresh" class="btn primary">Atualizar</button>
+        <a class="btn" href="/">CRM principal</a>
+        <a class="btn" href="/followups">Fila de follow-ups</a>
+        <span id="connection" class="status">Conectado</span>
+      </div>
+      <p class="muted">Esta página registra a conclusão real de um atendimento. Ela não envia WhatsApp diretamente. Quando o cliente autoriza o acompanhamento, o backend recebe um evento <code>service_completed</code> e aplica as travas de automação configuradas no servidor.</p>
+    </div>
+
+    <div id="kpis" class="kpis"></div>
+
+    <div class="card">
+      <h2>Novo atendimento</h2>
+      <form id="createForm" class="form-grid">
+        <div><label for="leadId">Cliente / lead</label><select id="leadId" required></select></div>
+        <div><label for="serviceName">Serviço</label><select id="serviceName" required></select></div>
+        <div><label for="attendanceDate">Data</label><input id="attendanceDate" type="date" required></div>
+        <div class="full"><label for="attendanceNote">Observação</label><textarea id="attendanceNote" rows="3" maxlength="500"></textarea></div>
+        <div class="full toolbar"><button id="createAttendance" class="btn primary" type="submit">Registrar atendimento</button><span id="createMessage" class="muted"></span></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="toolbar"><h2 style="margin-right:auto">Histórico de atendimentos</h2><select id="statusFilter" style="max-width:190px"><option value="">Todos</option><option>Agendado</option><option>Concluído</option><option>Cancelado</option></select></div>
+      <div id="attendanceTable"><div class="empty">Carregando…</div></div>
+    </div>
+  </section>
+</main>
+
+<div id="completeBack" class="modal-back">
+  <div class="modal">
+    <h2>Concluir atendimento</h2>
+    <p id="completeInfo" class="muted"></p>
+    <form id="completeForm" class="form-grid">
+      <input id="completeId" type="hidden">
+      <div class="full check">
+        <input id="experienceConsent" type="checkbox">
+        <label for="experienceConsent" style="margin:0;font-weight:600">Cliente autorizou receber contato de acompanhamento pelo WhatsApp para pesquisa de experiência.</label>
+      </div>
+      <div class="full"><label for="completeNote">Observação de conclusão</label><textarea id="completeNote" rows="3" maxlength="500"></textarea></div>
+      <div id="completeMessage" class="full muted"></div>
+      <div class="full toolbar"><button id="confirmComplete" class="btn primary" type="submit">Concluir atendimento</button><button id="cancelComplete" class="btn" type="button">Voltar</button></div>
+    </form>
+  </div>
+</div>
+
+<script>
+'use strict';
+const API='/.netlify/functions/crm-state';
+const SERVICES=['Pilates experimental','Pilates','Fisioterapia','Estética facial','Estética corporal','Depilação a laser','Acupuntura','Ozonioterapia','Massagem','Outro'];
+const $=id=>document.getElementById(id);
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let crmState=null;
+let revision=null;
+
+function today(){return new Date().toISOString().slice(0,10)}
+function newId(){return crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(16).slice(2)}`}
+function digits(value){return String(value||'').replace(/\D/g,'')}
+function validPhone(value){const n=digits(value);return n.length>=10&&n.length<=15}
+function leadById(id){return (crmState?.leads||[]).find(item=>String(item.id)===String(id))}
+function attendanceById(id){return (crmState?.attendances||[]).find(item=>String(item.id)===String(id))}
+
+async function request(url,options={}){
+  const response=await fetch(url,{credentials:'same-origin',...options,headers:{Accept:'application/json',...(options.headers||{})}});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok){const error=new Error(data.error||`Erro HTTP ${response.status}`);error.status=response.status;throw error}
+  return data;
+}
+async function api(action,options={}){return request(`${API}?action=${encodeURIComponent(action)}`,options)}
+async function crm(method='GET',body=null){return request(API,{method,headers:body?{'Content-Type':'application/json'}:{},...(body?{body:JSON.stringify(body)}:{})})}
+
+function normalize(){
+  if(!crmState||typeof crmState!=='object')crmState={};
+  if(!Array.isArray(crmState.leads))crmState.leads=[];
+  if(!Array.isArray(crmState.tasks))crmState.tasks=[];
+  if(!Array.isArray(crmState.sales))crmState.sales=[];
+  if(!Array.isArray(crmState.attendances))crmState.attendances=[];
+}
+
+async function loadState(){
+  const result=await crm('GET');
+  crmState=result.data&&typeof result.data==='object'?result.data:{};
+  revision=Number(result.revision);normalize();
+  renderLeadOptions();render();
+}
+
+async function saveState(nextState,automationEvents=[]){
+  const result=await crm('PUT',{data:nextState,revision,automationEvents});
+  crmState=nextState;revision=Number(result.revision);normalize();
+  return result;
+}
+
+function renderLeadOptions(){
+  const current=$('leadId').value;
+  $('leadId').innerHTML=crmState.leads.map(lead=>`<option value="${esc(lead.id)}">${esc(lead.name||'Sem nome')} • ${esc(lead.phone||'sem telefone')}</option>`).join('');
+  if(current&&crmState.leads.some(lead=>String(lead.id)===String(current)))$('leadId').value=current;
+  $('serviceName').innerHTML=SERVICES.map(name=>`<option>${esc(name)}</option>`).join('');
+  $('createAttendance').disabled=!crmState.leads.length;
+  if(!crmState.leads.length)$('createMessage').textContent='Cadastre um lead no CRM antes de registrar atendimento.';
+}
+
+function render(){
+  const list=crmState.attendances||[];
+  const completed=list.filter(a=>a.status==='Concluído').length;
+  const scheduled=list.filter(a=>a.status==='Agendado').length;
+  const consented=list.filter(a=>a.status==='Concluído'&&a.experienceConsent===true).length;
+  $('kpis').innerHTML=`<div class="kpi"><span class="muted">Agendados</span><b>${scheduled}</b></div><div class="kpi"><span class="muted">Concluídos</span><b>${completed}</b></div><div class="kpi"><span class="muted">Com autorização de acompanhamento</span><b>${consented}</b></div>`;
+  renderTable();
+}
+
+function renderTable(){
+  const filter=$('statusFilter').value;
+  const list=[...(crmState.attendances||[])].filter(a=>!filter||a.status===filter).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  $('attendanceTable').innerHTML=list.length?`<div class="table-wrap"><table><thead><tr><th>Data</th><th>Cliente</th><th>Serviço</th><th>Status</th><th>Acompanhamento</th><th>Observação</th><th>Ações</th></tr></thead><tbody>${list.map(a=>{
+    const lead=leadById(a.leadId);const status=a.status||'Agendado';const badge=status==='Concluído'?'ok':status==='Cancelado'?'cancel':'warn';
+    const consent=status==='Concluído'?(a.experienceConsent===true?'Autorizado':'Não autorizado'):'—';
+    const actions=status==='Agendado'?`<button class="btn primary" data-complete="${esc(a.id)}">Concluir</button><button class="btn danger" data-cancel="${esc(a.id)}">Cancelar</button>`:'<span class="muted">Registro fechado</span>';
+    return `<tr><td>${esc(a.date||'-')}</td><td><b>${esc(lead?.name||'Lead removido')}</b><br><span class="muted">${esc(lead?.phone||'')}</span></td><td>${esc(a.serviceName||a.service||'-')}</td><td><span class="badge ${badge}">${esc(status)}</span></td><td>${esc(consent)}</td><td>${esc(a.completionNote||a.note||'')}</td><td><div class="toolbar">${actions}</div></td></tr>`;
+  }).join('')}</tbody></table></div>`:'<div class="empty">Nenhum atendimento registrado.</div>';
+  $('attendanceTable').querySelectorAll('[data-complete]').forEach(button=>button.addEventListener('click',()=>openComplete(button.dataset.complete)));
+  $('attendanceTable').querySelectorAll('[data-cancel]').forEach(button=>button.addEventListener('click',()=>cancelAttendance(button.dataset.cancel)));
+}
+
+async function boot(){
+  try{
+    await api('session');$('authCard').classList.add('hidden');$('app').classList.remove('hidden');$('attendanceDate').value=today();await loadState();
+  }catch(error){$('app').classList.add('hidden');$('authCard').classList.remove('hidden');if(error.status!==401&&error.status!==403)$('loginError').textContent=error.message}
+}
+
+$('loginForm').addEventListener('submit',async event=>{
+  event.preventDefault();const button=event.submitter;button.disabled=true;$('loginError').textContent='';
+  try{await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});$('password').value='';await boot()}
+  catch(error){$('loginError').textContent=error.message}
+  finally{button.disabled=false}
+});
+
+$('createForm').addEventListener('submit',async event=>{
+  event.preventDefault();const button=$('createAttendance');button.disabled=true;$('createMessage').textContent='Salvando…';
+  try{
+    await loadState();const lead=leadById($('leadId').value);if(!lead)throw new Error('Cliente não encontrado. Atualize e tente novamente.');
+    const attendance={id:newId(),leadId:lead.id,serviceName:$('serviceName').value,date:$('attendanceDate').value,status:'Agendado',note:$('attendanceNote').value.trim(),createdAt:new Date().toISOString(),experienceConsent:false,experienceConsentAt:null};
+    const nextState=structuredClone(crmState);if(!Array.isArray(nextState.attendances))nextState.attendances=[];nextState.attendances.unshift(attendance);
+    await saveState(nextState,[]);$('attendanceNote').value='';$('createMessage').textContent='Atendimento registrado.';render();
+  }catch(error){$('createMessage').textContent=error.status===409?'O CRM mudou em outra sessão. Dados recarregados; tente novamente.':error.message;try{await loadState()}catch{}}
+  finally{button.disabled=!crmState?.leads?.length}
+});
+
+function openComplete(id){
+  const attendance=attendanceById(id);if(!attendance||attendance.status!=='Agendado')return;
+  const lead=leadById(attendance.leadId);$('completeId').value=id;$('experienceConsent').checked=false;$('completeNote').value='';$('completeMessage').textContent='';
+  $('completeInfo').textContent=`${lead?.name||'Cliente'} • ${attendance.serviceName||'Atendimento'} • ${attendance.date||''}`;
+  $('completeBack').style.display='flex';
+}
+function closeComplete(){$('completeBack').style.display='none'}
+$('cancelComplete').addEventListener('click',closeComplete);
+$('completeBack').addEventListener('click',event=>{if(event.target===$('completeBack'))closeComplete()});
+
+$('completeForm').addEventListener('submit',async event=>{
+  event.preventDefault();const button=$('confirmComplete');button.disabled=true;$('completeMessage').textContent='Salvando conclusão…';
+  try{
+    await loadState();const attendance=attendanceById($('completeId').value);if(!attendance||attendance.status!=='Agendado')throw new Error('Este atendimento já foi alterado em outra sessão.');
+    const lead=leadById(attendance.leadId);if(!lead)throw new Error('Cliente não encontrado no CRM.');
+    const consent=$('experienceConsent').checked;
+    if(consent&&!validPhone(lead.phone))throw new Error('O telefone do cliente precisa ser corrigido no CRM antes de registrar autorização para acompanhamento.');
+    const completedAt=new Date().toISOString();const nextState=structuredClone(crmState);const next=nextState.attendances.find(item=>String(item.id)===String(attendance.id));
+    next.status='Concluído';next.completedAt=completedAt;next.completionNote=$('completeNote').value.trim();next.experienceConsent=consent;next.experienceConsentAt=consent?completedAt:null;next.experienceConsentSource=consent?'atendimentos_operacionais':null;
+    const events=consent?[{clientEventId:`service_completed:${next.id}`,type:'service_completed',sourceType:'attendance',sourceId:String(next.id),occurredAt:completedAt}]:[];
+    const result=await saveState(nextState,events);
+    if(consent){
+      const failure=(result.automation?.failures||[]).find(item=>item.clientEventId===`service_completed:${next.id}`);
+      if(failure)throw new Error(`Atendimento salvo, mas o evento de experiência precisa de nova tentativa: ${failure.message}`);
+    }
+    closeComplete();render();$('connection').textContent='Conectado';
+  }catch(error){$('completeMessage').textContent=error.message;try{await loadState()}catch{}}
+  finally{button.disabled=false}
+});
+
+async function cancelAttendance(id){
+  if(!confirm('Cancelar este atendimento? O registro será preservado no histórico.'))return;
+  try{
+    await loadState();const attendance=attendanceById(id);if(!attendance||attendance.status!=='Agendado')throw new Error('Atendimento já alterado em outra sessão.');
+    const nextState=structuredClone(crmState);const next=nextState.attendances.find(item=>String(item.id)===String(id));next.status='Cancelado';next.cancelledAt=new Date().toISOString();
+    await saveState(nextState,[]);render();
+  }catch(error){alert(error.message);try{await loadState()}catch{}}
+}
+
+$('statusFilter').addEventListener('change',renderTable);
+$('refresh').addEventListener('click',async()=>{try{await loadState();$('connection').textContent='Conectado'}catch(error){$('connection').textContent='Erro';alert(error.message)}});
+boot();
+</script>
+</body>
+</html>
