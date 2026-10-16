@@ -13,6 +13,10 @@ function serverHeaders(key, extra = {}) {
   return headers;
 }
 
+function customerExperienceEnabled(env = process.env) {
+  return String(env.CUSTOMER_EXPERIENCE_ENABLED || '').trim().toLowerCase() === 'true';
+}
+
 async function persistedCrmState(base, key) {
   const response = await fetch(`${base}/rest/v1/crm_app_state?id=eq.main&select=data`, {
     method: 'GET',
@@ -104,6 +108,10 @@ async function verifiedExperienceCommand(command, data, base, key) {
  * Enqueues only explicit, allow-listed domain events supplied alongside a
  * successful CRM state save. Never derives events from JSON snapshots.
  * Client event IDs are echoed back so the caller can safely retain failed items.
+ *
+ * Customer-experience events are intentionally consumed as no-ops while the
+ * module feature gate is disabled. This prevents old surveys from accumulating
+ * and unexpectedly sending later when external automation is enabled.
  */
 export async function enqueueAutomationEvents(events = []) {
   if (!Array.isArray(events) || events.length > 50) throw new Error('automationEvents must be an array of at most 50 items.');
@@ -117,6 +125,10 @@ export async function enqueueAutomationEvents(events = []) {
       if (!clientEventId || clientEventId.length > 128) throw new Error('Invalid client event ID.');
       let command = toAutomationCommand(event);
       if (command.event_type === 'satisfaction_request') {
+        if (!customerExperienceEnabled()) {
+          acceptedEventIds.push(clientEventId);
+          continue;
+        }
         crmState = crmState || await persistedCrmState(base, key);
         command = await verifiedExperienceCommand(command, crmState, base, key);
       }
@@ -148,4 +160,4 @@ export async function enqueueAutomationEvents(events = []) {
   return { acceptedEventIds, failures };
 }
 
-export const __test = { config, serverHeaders, verifiedExperienceCommand, persistedCrmState, rpc };
+export const __test = { config, serverHeaders, customerExperienceEnabled, verifiedExperienceCommand, persistedCrmState, rpc };
