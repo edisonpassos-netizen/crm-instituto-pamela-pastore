@@ -27,6 +27,13 @@ test('operator page creates explicit follow-up event together with CRM task', ()
   assert.match(html, /acceptedEventIds/);
 });
 
+test('operator page records date and requested time for new follow-ups', () => {
+  assert.match(html, /id="taskDate" type="date" required/);
+  assert.match(html, /id="taskTime" type="time" required/);
+  assert.match(html, /time:\$\('taskTime'\)\.value/);
+  assert.match(html, /data e horário combinados/i);
+});
+
 test('operator page contains no outbound WhatsApp or Meta call', () => {
   assert.doesNotMatch(html, /graph\.facebook\.com/i);
   assert.doesNotMatch(html, /WHATSAPP_ACCESS_TOKEN/);
@@ -46,9 +53,11 @@ test('operator page separates follow-up and service recovery outcomes', () => {
   assert.doesNotMatch(html, /value=["']send_whatsapp["']/);
 });
 
-test('rescheduled result requires a new date and refreshes CRM state after completion', () => {
+test('rescheduled follow-up requires date and time while recovery reschedule remains date-only', () => {
   assert.match(html, /id="rescheduleDate" type="date"/);
-  assert.match(html, /rescheduleDate:rescheduled\?\$\('rescheduleDate'\)\.value:null/);
+  assert.match(html, /id="rescheduleTime" type="time"/);
   assert.match(html, /\$\('rescheduleDate'\)\.required=active/);
+  assert.match(html, /\$\('rescheduleTime'\)\.required=active&&!recovery/);
+  assert.match(html, /rescheduleTime:rescheduled&&!recovery\?\$\('rescheduleTime'\)\.value:null/);
   assert.match(html, /Promise\.all\(\[loadCrmState\(\),loadQueue\(\)\]\)/);
 });
