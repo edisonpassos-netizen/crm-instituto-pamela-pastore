@@ -1,7 +1,7 @@
 name: Automation worker and database integration tests
 on:
   push:
-    branches: [feature/automation-engine, integration/automation-safe-20261015]
+    branches: [main, feature/automation-engine, integration/automation-safe-20261015]
   pull_request:
 permissions:
   contents: read
@@ -15,11 +15,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
       - name: Check worker and API syntax
         run: node --check netlify/functions/automation-worker.mjs && node --check netlify/functions/lib/automation-event-adapter.mjs && node --check netlify/functions/lib/automation-enqueue.mjs && node --check netlify/functions/lib/customer-experience.mjs && node --check netlify/functions/lib/whatsapp-outbound-config.mjs && node --check netlify/functions/crm-state.mjs && node --check netlify/functions/whatsapp-status-webhook.mjs
       - name: Run automation unit, lifecycle, experience and operator page tests
-        run: node --test tests/automation-worker.test.mjs tests/automation-lifecycle.test.mjs tests/automation-event-adapter.test.mjs tests/automation-crm-integration.test.mjs tests/customer-experience.test.mjs tests/satisfaction-quick-replies.test.mjs tests/whatsapp-api-mock.test.mjs tests/whatsapp-status-webhook.test.mjs tests/automation-operator-queue.test.mjs tests/followups-page.test.mjs tests/automation-schedule.test.mjs
+        run: node --test tests/automation-worker.test.mjs tests/automation-lifecycle.test.mjs tests/automation-event-adapter.test.mjs tests/automation-crm-integration.test.mjs tests/customer-experience.test.mjs tests/satisfaction-quick-replies.test.mjs tests/whatsapp-missing-message-id.test.mjs tests/whatsapp-api-mock.test.mjs tests/whatsapp-status-webhook.test.mjs tests/automation-operator-queue.test.mjs tests/followups-page.test.mjs tests/automation-schedule.test.mjs
 
   database-integration:
     runs-on: ubuntu-latest
@@ -68,5 +68,8 @@ jobs:
         run: |
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610160001_customer_experience_flow.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610160002_customer_experience_send_completion.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610160003_preproduction_audit_hardening.sql
       - name: Test satisfaction, recovery, delayed review and idempotency
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/customer-experience-flow.sql
+      - name: Test pre-production audit hardening
+        run: psql -v ON_ERROR_STOP=1 -f tests/sql/preproduction-audit-hardening.sql

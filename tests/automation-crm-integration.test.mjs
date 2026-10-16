@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { enqueueAutomationEvents } from '../netlify/functions/lib/automation-enqueue.mjs';
 
+const CRM_TEST_URL = 'https://dxfzuxybubvnjertiowf.supabase.co';
+const CRM_TEST_KEY = 'sb_secret_synthetic';
+
 function snapshot() {
   return {
     url: process.env.SUPABASE_URL,
@@ -17,9 +20,24 @@ function restore(previous) {
   }
 }
 function serverEnv(){
-  process.env.SUPABASE_URL='https://supabase.test.invalid';
-  process.env.SUPABASE_SERVICE_ROLE_KEY='fake-server-secret-for-tests';
+  process.env.SUPABASE_URL=CRM_TEST_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY=CRM_TEST_KEY;
 }
+
+test('automation queue integration rejects any Supabase project other than the exclusive CRM database', async () => {
+  const previous=snapshot();
+  process.env.SUPABASE_URL='https://pposribyzhxyupbxrpfo.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY=CRM_TEST_KEY;
+  let calls=0;
+  globalThis.fetch=async()=>{calls++;return new Response('unexpected',{status:200})};
+  try {
+    await assert.rejects(
+      () => enqueueAutomationEvents([{clientEventId:'wrong-db',type:'lead_follow_up_requested',sourceType:'task',sourceId:'task-wrong-db',occurredAt:'2026-10-10T12:00:00.000Z'}]),
+      /CRM bloqueado/i
+    );
+    assert.equal(calls,0);
+  } finally { restore(previous); }
+});
 
 test('explicit supported CRM follow-up is enqueued through the server RPC', async () => {
   const previous=snapshot();serverEnv();const requests=[];
