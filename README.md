@@ -21,30 +21,42 @@ Não use o mesmo valor para a senha e o segredo de sessão. Configure todos os v
 
 ## Travas de automação
 
-Em produção, durante a fase de follow-up manual, mantenha explicitamente:
+Em produção, enquanto os canais externos não estiverem liberados, mantenha explicitamente:
 - `INTERNAL_AUTOMATIONS_ENABLED=true` — autoriza apenas o processamento interno necessário para transformar follow-ups validados em itens `awaiting_operator`.
-- `AUTOMATIONS_ENABLED=false` — mantém bloqueados os canais externos e impede que o worker reivindique filas de WhatsApp ou Google Review.
-- `WHATSAPP_TEST_MODE=false` — impede qualquer envio pela integração de WhatsApp.
+- `AUTOMATIONS_ENABLED=false` — impede que o worker reivindique filas externas de WhatsApp ou Google Review.
+- `WHATSAPP_TEST_MODE=false` — mantém desligado o modo de homologação.
+- `WHATSAPP_OUTBOUND_MODE=disabled` — trava explícita do canal de saída. Se ausente, o código continua fail-closed, exceto quando `WHATSAPP_TEST_MODE=true`, que preserva o comportamento de homologação já validado.
+- `WHATSAPP_PRODUCTION_ENABLED=false` — segunda trava independente para produção real.
 
 Quando somente `INTERNAL_AUTOMATIONS_ENABLED=true`, o worker usa exclusivamente `claim_due_internal_automation_jobs`, RPC que filtra `channel='internal'` e não reivindica canais externos. O RPC é restrito a `service_role`.
 
-Mesmo quando `AUTOMATIONS_ENABLED=true` for autorizado no futuro, o envio de WhatsApp continua exigindo separadamente `WHATSAPP_TEST_MODE=true`, credenciais válidas e destinatário presente na allowlist de teste. A ausência dessas condições deve falhar de forma fechada.
-
 ## Homologação WhatsApp Cloud API
 
-A preparação de homologação mantém envios reais bloqueados e usa configuração separada da Meta:
+A homologação usa configuração separada da Meta:
 - `WHATSAPP_WEBHOOK_VERIFY_TOKEN` — segredo usado apenas no handshake GET de verificação do webhook; nunca gravar o valor no repositório.
 - `WHATSAPP_APP_SECRET` — segredo do app Meta, necessário para validar `x-hub-signature-256` em webhooks POST.
-- `WHATSAPP_ACCESS_TOKEN` — token de acesso da Cloud API; deve existir somente em variável secreta de servidor.
-- `WHATSAPP_PHONE_NUMBER_ID` — ID do número de teste ou oficial fornecido pela Meta.
+- `WHATSAPP_ACCESS_TOKEN` — token de System User da Cloud API; deve existir somente em variável secreta de servidor.
+- `WHATSAPP_PHONE_NUMBER_ID` — ID do número de teste fornecido pela Meta.
 - `WHATSAPP_GRAPH_API_VERSION=v26.0` — versão fixada para a homologação atual.
-- `WHATSAPP_TEMPLATE_NAME=hello_world` — template padrão da Meta usado apenas no primeiro envio controlado de homologação.
+- `WHATSAPP_TEMPLATE_NAME=hello_world` — template padrão da Meta usado no primeiro envio controlado.
 - `WHATSAPP_TEMPLATE_LANGUAGE=en_US` — idioma do template `hello_world`.
 - `WHATSAPP_TEST_RECIPIENTS` — allowlist explícita de números autorizados para testes.
 
-Durante a homologação, `AUTOMATIONS_ENABLED=false` e `WHATSAPP_TEST_MODE=false` permanecem obrigatórios até que credenciais, webhook, número de teste, template e allowlist tenham sido validados separadamente. O webhook POST deve rejeitar payloads sem assinatura válida, e o worker nunca deve enviar para um destinatário fora de `WHATSAPP_TEST_RECIPIENTS`.
+Em modo de teste, o worker exige simultaneamente `WHATSAPP_TEST_MODE=true`, credenciais válidas e destinatário presente na allowlist. A ausência de qualquer condição falha de forma fechada.
 
-A configuração de homologação deve ser republicada após qualquer alteração de variável para garantir que o runtime das Functions receba os valores novos. Após configurar ou rotacionar `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_APP_SECRET`, template ou idioma, confirme sempre um deploy posterior à alteração antes de testar o envio.
+## Modo de produção do WhatsApp
+
+O modo de produção é separado do teste e não reutiliza silenciosamente Phone Number ID nem templates de homologação. Para uma futura ativação real serão necessários, além de `AUTOMATIONS_ENABLED=true`:
+- `WHATSAPP_OUTBOUND_MODE=production`
+- `WHATSAPP_PRODUCTION_ENABLED=true`
+- `WHATSAPP_PRODUCTION_PHONE_NUMBER_ID` — Phone Number ID do número oficial do Instituto.
+- `WHATSAPP_PRODUCTION_ALLOWED_COUNTRY_CODES` — lista explícita de códigos de país autorizados; para operação apenas no Brasil, usar `55`.
+- `WHATSAPP_PRODUCTION_TEMPLATE_NAME` e `WHATSAPP_PRODUCTION_TEMPLATE_LANGUAGE` — template padrão aprovado para mensagens comerciais implementadas futuramente.
+- `WHATSAPP_PRODUCTION_REVIEW_TEMPLATE_NAME` e `WHATSAPP_PRODUCTION_REVIEW_TEMPLATE_LANGUAGE` — template aprovado exclusivamente para pedido de avaliação Google.
+
+O canal `google_review` seleciona obrigatoriamente o template de avaliação. O código não usa `hello_world` como fallback em produção. A produção continua bloqueada até que número oficial, templates aprovados e controles operacionais sejam homologados separadamente.
+
+A configuração deve ser republicada após qualquer alteração de variável para garantir que o runtime das Functions receba os valores novos.
 
 ## Autenticação
 A função exige uma sessão assinada, armazenada em cookie `HttpOnly; Secure; SameSite=Strict` com validade de 8 horas. A origem/CORS é uma camada adicional e não substitui autenticação.
@@ -53,10 +65,12 @@ A função exige uma sessão assinada, armazenada em cookie `HttpOnly; Secure; S
 A raiz do site é o diretório do projeto; as funções devem ser publicadas a partir de `netlify/functions/`. O workflow `.github/workflows/import-netlify-page.yml` importa a interface atual do site Netlify para o repositório quando executado manualmente.
 
 ## Antes de usar com dados reais
-- Conectar este repositório ao site Netlify correto.
-- Configurar todas as variáveis acima.
+- Conectar o número oficial ao app Meta correto sem substituir a configuração de teste antes da validação.
+- Criar e aprovar os templates reais em português.
+- Configurar as variáveis `WHATSAPP_PRODUCTION_*` sem habilitar as duas travas de produção.
 - Confirmar que o deploy publica as funções esperadas.
 - Testar login, leitura, gravação, edição e persistência após recarregar.
+- Executar uma homologação controlada do número oficial antes de habilitar filas reais.
 - Manter automações externas bloqueadas até homologação específica do canal.
 - Tornar o repositório privado, pois contém código proprietário do CRM.
 
