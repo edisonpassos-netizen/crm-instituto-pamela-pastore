@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { crmDatabaseConfig } from './lib/crm-database.mjs';
 import { resolveWhatsAppOutboundConfig } from './lib/whatsapp-outbound-config.mjs';
+import { resolveFollowUpDueAt, validFollowUpTime } from './lib/followup-schedule.mjs';
 
 const DEFAULT_BATCH_SIZE = 10;
 const RETRY_BASE_SECONDS = 60;
@@ -275,9 +276,19 @@ async function handleLeadFollowUp(job) {
     await updateJob(job, { status: 'cancelled', locked_at: null, last_error: detail });
     return;
   }
-  const taskDate = String(task.date || '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(taskDate) || !Number.isFinite(Date.parse(taskDate + 'T12:00:00.000Z'))) {
-    const detail = 'Data do follow-up ausente ou inválida; corrigir a tarefa no CRM.';
+  const taskDate = String(task.date || '').trim();
+  const taskTime = String(task.time || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(taskDate) || !validFollowUpTime(taskTime)) {
+    const detail = 'Data ou horário do follow-up ausente ou inválido; corrigir a tarefa no CRM.';
+    await logAttempt(job, 'failed', detail);
+    await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
+    return;
+  }
+  let dueAt;
+  try {
+    dueAt = resolveFollowUpDueAt(task, process.env);
+  } catch {
+    const detail = 'Data, horário ou fuso do follow-up inválido; corrigir a tarefa ou a configuração do CRM.';
     await logAttempt(job, 'failed', detail);
     await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
     return;
@@ -298,14 +309,22 @@ async function handleLeadFollowUp(job) {
     await updateJob(job, { status: 'dead_letter', locked_at: null, last_error: detail });
     return;
   }
-  const dueAt = new Date(taskDate + 'T12:00:00.000Z');
   if (dueAt.getTime() > Date.now()) {
-    const detail = 'Follow-up validado e reagendado para a data cadastrada no CRM.';
+    const detail = taskTime
+      ? 'Follow-up validado e reagendado para a data e horário cadastrados no CRM.'
+      : 'Follow-up validado e reagendado para a data cadastrada no CRM.';
     await logAttempt(job, 'succeeded', detail);
     await updateJob(job, {
       status: 'pending', scheduled_at: dueAt.toISOString(), locked_at: null,
       last_error: null,
-      payload: { ...(job.payload || {}), task_date: taskDate, lead_id: String(lead.id), lead_name: String(lead.name || '') }
+      payload: {
+        ...(job.payload || {}),
+        task_date: taskDate,
+        task_time: taskTime || null,
+        due_at: dueAt.toISOString(),
+        lead_id: String(lead.id),
+        lead_name: String(lead.name || '')
+      }
     });
     return;
   }
@@ -322,6 +341,8 @@ async function handleLeadFollowUp(job) {
         lead_name: String(lead.name || ''),
         recipient_phone: phone,
         task_date: taskDate,
+        task_time: taskTime || null,
+        due_at: dueAt.toISOString(),
         task_type: String(task.type || ''),
         note: String(task.note || '').slice(0, 500),
         prepared_at: new Date().toISOString()
