@@ -227,10 +227,12 @@ async function completeExperienceSend(job, providerMessageId) {
     error.code = 'DELIVERY_UNKNOWN';
     throw error;
   }
-  try {
-    await logAttempt(job, 'succeeded', 'Aceito pela API oficial do WhatsApp e conciliado com a experiência.', providerMessageId);
-  } catch (logError) {
-    console.error('automation attempt log failed after finalized experience send:', logError?.message || 'unknown');
+  if (result?.attemptLogged !== true) {
+    try {
+      await logAttempt(job, 'succeeded', 'Aceito pela API oficial do WhatsApp e conciliado com a experiência.', providerMessageId);
+    } catch (logError) {
+      console.error('automation attempt log failed after finalized experience send:', logError?.message || 'unknown');
+    }
   }
 }
 
