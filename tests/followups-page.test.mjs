@@ -31,7 +31,7 @@ test('operator page records date and requested time for new follow-ups', () => {
   assert.match(html, /id="taskDate" type="date" required/);
   assert.match(html, /id="taskTime" type="time" required/);
   assert.match(html, /time:\$\('taskTime'\)\.value/);
-  assert.match(html, /data e horário combinados/i);
+  assert.match(html, /data e o horário combinados/i);
 });
 
 test('operator page contains no outbound WhatsApp or Meta call', () => {
