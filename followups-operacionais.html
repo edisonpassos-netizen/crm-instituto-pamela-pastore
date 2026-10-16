@@ -6,7 +6,7 @@
 <title>Fila Operacional — Instituto Pâmela Pastore</title>
 <style>
 :root{--primary:#1A8690;--primary-dark:#126B73;--bg:#f4f7f7;--surface:#fff;--line:#dfe7e8;--text:#263238;--muted:#68777a;--danger:#c94b4b;--success:#2e8b57;--warning:#b9770e;--shadow:0 8px 28px rgba(25,65,70,.08)}
-*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}button,input,select,textarea{font:inherit}.top{background:var(--primary);color:#fff;padding:18px 22px}.top h1{margin:0;font-size:20px}.top p{margin:5px 0 0;opacity:.9}.wrap{max-width:1200px;margin:auto;padding:20px}.card{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:9px 12px;border-radius:9px;font-weight:650;cursor:pointer}.btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}.btn.primary:hover{background:var(--primary-dark)}.btn:disabled{opacity:.55;cursor:not-allowed}.muted{color:var(--muted)}.status{display:inline-flex;padding:6px 10px;border-radius:20px;font-size:12px;font-weight:700;background:#eef8f2;color:var(--success)}.badge{display:inline-flex;padding:4px 8px;border-radius:20px;font-size:11px;font-weight:800;background:#eef3f3;color:#456}.badge.recovery{background:#fff4df;color:var(--warning)}.error{color:var(--danger)}.empty{padding:28px;text-align:center;color:var(--muted)}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{color:var(--muted);font-size:11px;text-transform:uppercase}input,select,textarea{width:100%;border:1px solid #cfdadb;border-radius:8px;padding:9px;background:#fff;color:var(--text)}label{font-size:12px;font-weight:700;color:#536164;display:block;margin-bottom:5px}.modal-back{position:fixed;inset:0;background:rgba(16,40,42,.45);display:none;align-items:center;justify-content:center;padding:20px}.modal{background:#fff;border-radius:14px;width:min(560px,100%);padding:20px}.grid{display:grid;gap:12px}.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.full{grid-column:1/-1}.auth{max-width:430px;margin:50px auto}.auth form{display:grid;gap:12px}.hidden{display:none!important}@media(max-width:700px){.wrap{padding:12px}th,td{white-space:normal;min-width:120px}.form-grid{grid-template-columns:1fr}}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}button,input,select,textarea{font:inherit}.top{background:var(--primary);color:#fff;padding:18px 22px}.top h1{margin:0;font-size:20px}.top p{margin:5px 0 0;opacity:.9}.wrap{max-width:1200px;margin:auto;padding:20px}.card{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:9px 12px;border-radius:9px;font-weight:650;cursor:pointer;text-decoration:none}.btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}.btn.primary:hover{background:var(--primary-dark)}.btn:disabled{opacity:.55;cursor:not-allowed}.muted{color:var(--muted)}.status{display:inline-flex;padding:6px 10px;border-radius:20px;font-size:12px;font-weight:700;background:#eef8f2;color:var(--success)}.badge{display:inline-flex;padding:4px 8px;border-radius:20px;font-size:11px;font-weight:800;background:#eef3f3;color:#456}.badge.recovery{background:#fff4df;color:var(--warning)}.error{color:var(--danger)}.empty{padding:28px;text-align:center;color:var(--muted)}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{color:var(--muted);font-size:11px;text-transform:uppercase}input,select,textarea{width:100%;border:1px solid #cfdadb;border-radius:8px;padding:9px;background:#fff;color:var(--text)}label{font-size:12px;font-weight:700;color:#536164;display:block;margin-bottom:5px}.modal-back{position:fixed;inset:0;background:rgba(16,40,42,.45);display:none;align-items:center;justify-content:center;padding:20px;z-index:10}.modal{background:#fff;border-radius:14px;width:min(560px,100%);padding:20px}.grid{display:grid;gap:12px}.form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.full{grid-column:1/-1}.auth{max-width:430px;margin:50px auto}.auth form{display:grid;gap:12px}.hidden{display:none!important}@media(max-width:800px){.wrap{padding:12px}th,td{white-space:normal;min-width:120px}.form-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -26,17 +26,20 @@
     <div class="card">
       <div class="toolbar">
         <button id="refresh" class="btn primary">Atualizar fila</button>
-        <a class="btn" href="/">Voltar ao CRM</a>
+        <a class="btn" href="/">CRM principal</a>
+        <a class="btn" href="/atendimentos">Atendimentos</a>
         <span id="status" class="status">Conectado</span>
       </div>
       <p class="muted">Aqui aparecem follow-ups validados e casos em que o cliente informou que a experiência poderia melhorar. Nenhum contato é enviado automaticamente por esta página.</p>
     </div>
 
     <div class="card">
-      <h2>Novo follow-up</h2>
+      <h2>Novo follow-up solicitado</h2>
+      <p class="muted">Registre a data e o horário combinados com o cliente. O horário é interpretado no fuso operacional do Instituto.</p>
       <form id="createForm" class="form-grid">
         <div><label for="leadId">Lead</label><select id="leadId" required></select></div>
         <div><label for="taskDate">Data</label><input id="taskDate" type="date" required></div>
+        <div><label for="taskTime">Horário</label><input id="taskTime" type="time" required></div>
         <div><label for="taskType">Tipo</label><select id="taskType"><option>WhatsApp</option><option>Ligação</option><option>Retorno</option><option>Reativação</option><option>Outro</option></select></div>
         <div class="full"><label for="taskNote">Observação</label><textarea id="taskNote" rows="3" maxlength="500"></textarea></div>
         <div class="full toolbar"><button id="createTask" class="btn primary" type="submit">Criar follow-up</button><span id="createMessage" class="muted"></span></div>
@@ -49,7 +52,18 @@
   </section>
 </main>
 
-<div id="modalBack" class="modal-back"><div class="modal"><h2 id="resultTitle">Registrar resultado</h2><p id="leadInfo" class="muted"></p><form id="resultForm" class="grid"><input id="queueId" type="hidden"><input id="eventType" type="hidden"><div><label for="outcome">Resultado</label><select id="outcome" required></select></div><div id="rescheduleWrap" class="hidden"><label for="rescheduleDate">Nova data do retorno</label><input id="rescheduleDate" type="date"></div><div><label for="note">Observação</label><textarea id="note" rows="4" maxlength="500"></textarea></div><p id="resultHelp" class="muted"></p><div class="toolbar"><button id="saveResult" class="btn primary" type="submit">Salvar resultado</button><button id="cancelResult" class="btn" type="button">Cancelar</button></div></form></div></div>
+<div id="modalBack" class="modal-back"><div class="modal">
+  <h2 id="resultTitle">Registrar resultado</h2><p id="leadInfo" class="muted"></p>
+  <form id="resultForm" class="grid">
+    <input id="queueId" type="hidden"><input id="eventType" type="hidden">
+    <div><label for="outcome">Resultado</label><select id="outcome" required></select></div>
+    <div id="rescheduleWrap" class="hidden"><label for="rescheduleDate">Nova data do retorno</label><input id="rescheduleDate" type="date"></div>
+    <div id="rescheduleTimeWrap" class="hidden"><label for="rescheduleTime">Novo horário do retorno</label><input id="rescheduleTime" type="time"></div>
+    <div><label for="note">Observação</label><textarea id="note" rows="4" maxlength="500"></textarea></div>
+    <p id="resultHelp" class="muted"></p>
+    <div class="toolbar"><button id="saveResult" class="btn primary" type="submit">Salvar resultado</button><button id="cancelResult" class="btn" type="button">Cancelar</button></div>
+  </form>
+</div></div>
 
 <script>
 'use strict';
@@ -60,7 +74,7 @@ let items=[];
 let crmState=null;
 let revision=null;
 
-async function request(url, options={}){
+async function request(url,options={}){
   const response=await fetch(url,{credentials:'same-origin',...options,headers:{Accept:'application/json',...(options.headers||{})}});
   const data=await response.json().catch(()=>({}));
   if(!response.ok){const error=new Error(data.error||`Erro HTTP ${response.status}`);error.status=response.status;throw error}
@@ -69,9 +83,10 @@ async function request(url, options={}){
 async function api(action,options={}){return request(`${API}?action=${encodeURIComponent(action)}`,options)}
 async function crm(method='GET',body=null){return request(API,{method,headers:body?{'Content-Type':'application/json'}:{},...(body?{body:JSON.stringify(body)}:{})})}
 
-function today(){return new Date().toISOString().slice(0,10)}
+function today(){return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
 function newId(){return crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(16).slice(2)}`}
 function isRecovery(item){return item?.event_type==='service_recovery_required'}
+function currentItem(){return items.find(value=>value.id===$('queueId').value)}
 
 async function loadCrmState(){
   const data=await crm('GET');
@@ -104,13 +119,13 @@ $('loginForm').addEventListener('submit',async event=>{
 });
 
 $('createForm').addEventListener('submit',async event=>{
-  event.preventDefault();
-  const button=$('createTask');button.disabled=true;$('createMessage').textContent='Salvando…';
+  event.preventDefault();const button=$('createTask');button.disabled=true;$('createMessage').textContent='Salvando…';
   try{
     await loadCrmState();
     const lead=crmState.leads.find(item=>String(item.id)===String($('leadId').value));
     if(!lead)throw new Error('Lead não encontrado. Atualize a página e tente novamente.');
-    const task={id:newId(),leadId:lead.id,date:$('taskDate').value,type:$('taskType').value,note:$('taskNote').value.trim(),done:false};
+    const task={id:newId(),leadId:lead.id,date:$('taskDate').value,time:$('taskTime').value,type:$('taskType').value,note:$('taskNote').value.trim(),done:false};
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(task.date)||!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(task.time))throw new Error('Informe data e horário válidos para o retorno.');
     const nextState=structuredClone(crmState);nextState.tasks.push(task);
     const clientEventId=task.id;
     const result=await crm('PUT',{data:nextState,revision,automationEvents:[{clientEventId,type:'lead_follow_up_requested',sourceType:'task',sourceId:task.id,occurredAt:new Date().toISOString()}]});
@@ -119,7 +134,7 @@ $('createForm').addEventListener('submit',async event=>{
       const failure=result.automation?.failures?.find(item=>item.clientEventId===clientEventId);
       throw new Error(failure?.message||'Follow-up salvo no CRM, mas ainda não entrou na fila de automação.');
     }
-    crmState=nextState;revision=Number(result.revision);$('taskNote').value='';$('createMessage').textContent='Follow-up criado e enfileirado com sucesso.';
+    crmState=nextState;revision=Number(result.revision);$('taskNote').value='';$('taskTime').value='';$('createMessage').textContent='Follow-up criado e enfileirado com data e horário.';
     await loadQueue();
   }catch(error){
     $('createMessage').textContent=error.status===409?'O CRM mudou em outra sessão. Dados recarregados; envie novamente.':error.message;
@@ -132,7 +147,7 @@ async function loadQueue(){
   try{
     const data=await api('automation-queue');items=Array.isArray(data.items)?data.items:[];
     if(!items.length){$('queue').innerHTML='<div class="empty">Nenhuma tarefa aguardando ação manual.</div>';return}
-    $('queue').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Data</th><th>Cliente</th><th>Telefone</th><th>Serviço</th><th>Observação</th><th>Ação</th></tr></thead><tbody>${items.map(item=>{const d=item.payload?.dispatch||{};const recovery=isRecovery(item);return `<tr><td><span class="badge ${recovery?'recovery':''}">${recovery?'Recuperação de experiência':'Follow-up'}</span></td><td>${esc(d.task_date||String(item.scheduled_at||'').slice(0,10)||'-')}</td><td><b>${esc(d.lead_name||'Cliente')}</b></td><td>${esc(d.recipient_phone||'Não informado')}</td><td>${esc(d.service_name||d.task_type||'-')}</td><td>${esc(d.note||'')}</td><td><button class="btn primary" data-id="${esc(item.id)}">Registrar resultado</button></td></tr>`}).join('')}</tbody></table></div>`;
+    $('queue').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Data / horário</th><th>Cliente</th><th>Telefone</th><th>Serviço</th><th>Observação</th><th>Ação</th></tr></thead><tbody>${items.map(item=>{const d=item.payload?.dispatch||{};const recovery=isRecovery(item);const when=d.task_date?`${d.task_date}${d.task_time?' • '+d.task_time:''}`:String(item.scheduled_at||'').slice(0,16).replace('T',' ');return `<tr><td><span class="badge ${recovery?'recovery':''}">${recovery?'Recuperação de experiência':'Follow-up'}</span></td><td>${esc(when||'-')}</td><td><b>${esc(d.lead_name||'Cliente')}</b></td><td>${esc(d.recipient_phone||'Não informado')}</td><td>${esc(d.service_name||d.task_type||'-')}</td><td>${esc(d.note||'')}</td><td><button class="btn primary" data-id="${esc(item.id)}">Registrar resultado</button></td></tr>`}).join('')}</tbody></table></div>`;
     $('queue').querySelectorAll('button[data-id]').forEach(button=>button.addEventListener('click',()=>openResult(button.dataset.id)));
   }catch(error){$('queue').innerHTML=`<div class="empty error">${esc(error.message)}</div>`;$('status').textContent='Erro de conexão';if(error.status===401)await boot()}
 }
@@ -144,20 +159,24 @@ function setOutcomeOptions(recovery){
 }
 function syncRescheduleField(){
   const active=$('outcome').value==='rescheduled';
+  const recovery=isRecovery(currentItem());
   $('rescheduleWrap').classList.toggle('hidden',!active);
   $('rescheduleDate').required=active;
+  $('rescheduleTimeWrap').classList.toggle('hidden',!active||recovery);
+  $('rescheduleTime').required=active&&!recovery;
   if(active&&!$('rescheduleDate').value)$('rescheduleDate').value=today();
+  if(!active||recovery)$('rescheduleTime').value='';
 }
 function openResult(id){
   const item=items.find(value=>value.id===id);if(!item)return;
   const d=item.payload?.dispatch||{};const recovery=isRecovery(item);
   $('queueId').value=id;$('eventType').value=item.event_type||'lead_follow_up_requested';
   $('leadInfo').textContent=`${d.lead_name||'Cliente'}${d.recipient_phone?' • '+d.recipient_phone:''}${d.service_name?' • '+d.service_name:''}`;
-  $('note').value='';setOutcomeOptions(recovery);$('outcome').value=recovery?'resolved':'contacted';$('rescheduleDate').value='';syncRescheduleField();
+  $('note').value='';setOutcomeOptions(recovery);$('outcome').value=recovery?'resolved':'contacted';$('rescheduleDate').value='';$('rescheduleTime').value='';syncRescheduleField();
   $('resultTitle').textContent=recovery?'Registrar recuperação da experiência':'Registrar resultado do follow-up';
   $('resultHelp').textContent=recovery
     ? 'Registre o que aconteceu e como o caso foi tratado. Ao concluir ou encerrar o caso, o CRM prepara o convite neutro de avaliação para a etapa posterior. Nenhuma mensagem é enviada por esta tela.'
-    : 'Este registro conclui a tarefa atual no CRM. Quando houver reagendamento, um novo follow-up será criado para a data escolhida. Nenhuma mensagem é enviada por esta tela.';
+    : 'Se o cliente pedir novo retorno, registre data e horário. A tarefa atual é concluída e um novo follow-up interno é criado. Nenhuma mensagem é enviada por esta tela.';
   $('modalBack').style.display='flex';
 }
 function closeResult(){$('modalBack').style.display='none'}
@@ -167,14 +186,21 @@ $('modalBack').addEventListener('click',event=>{if(event.target===$('modalBack')
 $('refresh').addEventListener('click',async()=>{await Promise.all([loadCrmState(),loadQueue()])});
 $('resultForm').addEventListener('submit',async event=>{
   event.preventDefault();const button=$('saveResult');button.disabled=true;
-  const rescheduled=$('outcome').value==='rescheduled';
+  const rescheduled=$('outcome').value==='rescheduled';const recovery=isRecovery(currentItem());
   try{
-    const result=await api('automation-queue-result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:$('queueId').value,eventType:$('eventType').value,outcome:$('outcome').value,note:$('note').value,rescheduleDate:rescheduled?$('rescheduleDate').value:null})});
+    if(rescheduled&&!recovery&&!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test($('rescheduleTime').value))throw new Error('Informe o horário combinado com o cliente.');
+    const result=await api('automation-queue-result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      id:$('queueId').value,
+      eventType:$('eventType').value,
+      outcome:$('outcome').value,
+      note:$('note').value,
+      rescheduleDate:rescheduled?$('rescheduleDate').value:null,
+      rescheduleTime:rescheduled&&!recovery?$('rescheduleTime').value:null
+    })});
     closeResult();
     await Promise.all([loadCrmState(),loadQueue()]);
     $('createMessage').textContent=result.message||'Resultado registrado com sucesso.';
-  }
-  catch(error){alert(error.message)}finally{button.disabled=false}
+  }catch(error){alert(error.message)}finally{button.disabled=false}
 });
 boot();
 </script>
