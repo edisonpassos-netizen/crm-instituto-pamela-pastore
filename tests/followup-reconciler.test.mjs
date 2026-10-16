@@ -14,13 +14,18 @@ function withEnv(overrides, fn){
   });
 }
 
-test('pendingUnqueuedTasks returns only open tasks missing from queue',()=>{
-  const data={tasks:[
-    {id:'a',date:'2026-10-16',done:false},
-    {id:'b',date:'2026-10-17',done:false},
-    {id:'c',date:'2026-10-18',done:true},
-    {id:'',date:'2026-10-18',done:false}
-  ]};
+test('pendingUnqueuedTasks returns only valid open tasks missing from queue',()=>{
+  const data={
+    leads:[{id:'lead-1'},{id:'lead-2'}],
+    tasks:[
+      {id:'a',leadId:'lead-1',date:'2026-10-16',done:false},
+      {id:'b',leadId:'lead-2',date:'2026-10-17',done:false},
+      {id:'c',leadId:'lead-1',date:'2026-10-18',done:true},
+      {id:'bad-lead',leadId:'missing',date:'2026-10-18',done:false},
+      {id:'bad-date',leadId:'lead-1',date:'16/10/2026',done:false},
+      {id:'',leadId:'lead-1',date:'2026-10-18',done:false}
+    ]
+  };
   const result=__test.pendingUnqueuedTasks(data,new Set(['b']),100);
   assert.deepEqual(result.map(x=>x.id),['a']);
 });
@@ -51,17 +56,21 @@ test('reconciler is fail-closed when internal automations are disabled',async()=
   }finally{globalThis.fetch=previous}
 });
 
-test('reconciler enqueues only missing follow-ups and never calls Meta',async()=>{
+test('reconciler enqueues only missing valid follow-ups and never calls Meta',async()=>{
   const previous=globalThis.fetch;
   const calls=[];
   await withEnv({SUPABASE_URL:CRM_TEST_URL,SUPABASE_SERVICE_ROLE_KEY:CRM_TEST_KEY},async()=>{
     globalThis.fetch=async(url,options={})=>{
       calls.push({url:String(url),method:options.method||'GET',body:options.body?JSON.parse(options.body):null});
-      if(String(url).includes('crm_app_state'))return Response.json([{data:{tasks:[
-        {id:'task-existing',date:'2026-10-16',done:false},
-        {id:'task-missing',date:'2026-10-17',done:false},
-        {id:'task-done',date:'2026-10-18',done:true}
-      ]}}]);
+      if(String(url).includes('crm_app_state'))return Response.json([{data:{
+        leads:[{id:'lead-1'},{id:'lead-2'}],
+        tasks:[
+          {id:'task-existing',leadId:'lead-1',date:'2026-10-16',done:false},
+          {id:'task-missing',leadId:'lead-2',date:'2026-10-17',done:false},
+          {id:'task-done',leadId:'lead-1',date:'2026-10-18',done:true},
+          {id:'task-orphan',leadId:'missing',date:'2026-10-18',done:false}
+        ]
+      }}]);
       if(String(url).includes('crm_automation_queue?'))return Response.json([{source_id:'task-existing'}]);
       if(String(url).includes('/rpc/enqueue_crm_automation'))return Response.json('11111111-1111-4111-8111-111111111111');
       return new Response('unexpected',{status:500});
