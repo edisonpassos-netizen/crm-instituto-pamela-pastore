@@ -21,47 +21,81 @@ async function persistedCrmState(base, key) {
   if (!response.ok) throw new Error(`Could not verify persisted CRM state (HTTP ${response.status}).`);
   const rows = await response.json();
   if (!Array.isArray(rows) || !rows[0]?.data || typeof rows[0].data !== 'object') {
-    throw new Error('Persisted CRM state is unavailable; review request not enqueued.');
+    throw new Error('Persisted CRM state is unavailable; automation request not enqueued.');
   }
   return rows[0].data;
 }
 
-function verifiedReviewCommand(command, data) {
+async function rpc(base, key, name, body) {
+  const response = await fetch(`${base}/rest/v1/rpc/${name}`, {
+    method: 'POST',
+    headers: serverHeaders(key, { 'Content-Type': 'application/json', Accept: 'application/json' }),
+    body: JSON.stringify(body)
+  });
+  const raw = await response.text();
+  let parsed = null;
+  try { parsed = raw ? JSON.parse(raw) : null; } catch {}
+  if (!response.ok) throw new Error(`RPC ${name} HTTP ${response.status}: ${raw.slice(0, 160)}`);
+  return parsed;
+}
+
+async function verifiedExperienceCommand(command, data, base, key) {
   const attendanceId = command.source_id;
   const attendance = Array.isArray(data.attendances)
     ? data.attendances.find(item => String(item?.id || '') === attendanceId)
     : null;
-  if (!attendance || attendance.status !== 'Concluído' || attendance.reviewConsent !== true || !attendance.consentAt) {
-    throw new Error('Attendance is not completed with recorded review consent.');
+  const optedIn = attendance?.experienceConsent === true || attendance?.reviewConsent === true;
+  const consentAt = attendance?.experienceConsentAt || attendance?.consentAt || null;
+  if (!attendance || attendance.status !== 'Concluído' || !optedIn || !consentAt) {
+    throw new Error('Attendance is not completed with recorded customer contact consent.');
   }
+
   const lead = Array.isArray(data.leads)
     ? data.leads.find(item => String(item?.id || '') === String(attendance.leadId || ''))
     : null;
   if (!lead) throw new Error('Attendance customer is missing from persisted CRM state.');
+
   const phone = String(lead.phone || '').replace(/\D/g, '');
   if (phone.length < 10 || phone.length > 15) throw new Error('Customer phone is invalid.');
-  let reviewUrl;
-  try {
-    reviewUrl = new URL(String(data.settings?.reviewUrl || '').trim());
-  } catch {
-    throw new Error('Official Google review URL is missing or invalid.');
+
+  const firstName = String(lead.name || '').trim().split(/\s+/)[0] || 'Cliente';
+  const serviceName = String(
+    attendance.serviceName || attendance.service || attendance.type || attendance.procedure || attendance.modality || 'Atendimento'
+  ).trim().slice(0, 200) || 'Atendimento';
+
+  const experienceId = await rpc(base, key, 'register_customer_experience_request', {
+    p_source_type: 'attendance',
+    p_source_id: attendanceId,
+    p_customer_id: String(lead.id || ''),
+    p_recipient_phone: phone,
+    p_first_name: firstName,
+    p_service_name: serviceName,
+    p_metadata: {
+      attendance_id: attendanceId,
+      consent_at: String(consentAt),
+      consent_source: attendance.experienceConsent === true ? 'experienceConsent' : 'legacyReviewConsent'
+    }
+  });
+  if (typeof experienceId !== 'string' || !experienceId) {
+    throw new Error('Customer experience record could not be created.');
   }
-  if (reviewUrl.protocol !== 'https:' || !reviewUrl.hostname) {
-    throw new Error('Official Google review URL must use HTTPS.');
-  }
+
   return {
     ...command,
+    dedupe_key: `crm:satisfaction_request:experience:${experienceId}`,
+    source_type: 'customer_experience',
+    source_id: experienceId,
     recipient_phone: phone,
     payload: {
       ...command.payload,
+      experience_id: experienceId,
       attendance_id: attendanceId,
-      attendance_status: 'completed',
+      customer_id: String(lead.id || ''),
+      first_name: firstName,
+      service_name: serviceName,
       customer_opt_in: true,
-      consent_at: attendance.consentAt,
-      customer_id: String(lead.id),
-      first_name: String(lead.name || '').trim().split(/\s+/)[0] || '',
-      google_review_url: reviewUrl.toString(),
-      template_parameters: [String(lead.name || '').trim().split(/\s+/)[0] || 'Olá', reviewUrl.toString()]
+      consent_at: String(consentAt),
+      template_parameters: [firstName, serviceName]
     }
   };
 }
@@ -82,9 +116,9 @@ export async function enqueueAutomationEvents(events = []) {
     try {
       if (!clientEventId || clientEventId.length > 128) throw new Error('Invalid client event ID.');
       let command = toAutomationCommand(event);
-      if (command.event_type === 'service_completed') {
+      if (command.event_type === 'satisfaction_request') {
         crmState = crmState || await persistedCrmState(base, key);
-        command = verifiedReviewCommand(command, crmState);
+        command = await verifiedExperienceCommand(command, crmState, base, key);
       }
       const response = await fetch(`${base}/rest/v1/rpc/enqueue_crm_automation`, {
         method: 'POST',
@@ -114,4 +148,4 @@ export async function enqueueAutomationEvents(events = []) {
   return { acceptedEventIds, failures };
 }
 
-export const __test = { config, serverHeaders };
+export const __test = { config, serverHeaders, verifiedExperienceCommand, persistedCrmState, rpc };
