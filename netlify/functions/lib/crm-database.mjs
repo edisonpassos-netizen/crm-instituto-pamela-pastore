@@ -6,7 +6,7 @@ export function crmDatabaseConfig(env) {
   const url = String(env.SUPABASE_URL || '').trim().replace(/\/$/, '');
   const key = String(env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   const fail = message => { const error = new Error(message); error.status = 503; throw error; };
-  if (url !== CRM_DATABASE_URL) fail('CRM bloqueado: configure SUPABASE_URL para o projeto exclusivo crm-automation-test.');
+  if (url !== CRM_DATABASE_URL) fail('CRM bloqueado: configure SUPABASE_URL para o projeto exclusivo do CRM oficial.');
   if (!key || key.startsWith('sb_publishable_')) fail('Configure a chave secreta do projeto exclusivo do CRM no Netlify.');
   if (key.startsWith('sb_secret_')) return { url, key };
   // This is a configuration check only. Supabase validates the JWT signature.

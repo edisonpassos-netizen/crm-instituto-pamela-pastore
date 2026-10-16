@@ -44,32 +44,50 @@ Nenhuma etapa deste documento autoriza migração do número oficial, envio real
 
 O backend deve usar os nomes exatos aprovados pela Meta. Se a Meta alterar categoria, nome, idioma ou componentes, revisar configuração e testes antes de qualquer ativação.
 
+## Sincronização GitHub → Netlify
+
+- `main` contém as correções mais recentes e a Central Operacional.
+- A publicação Netlify deve sempre ser comparada pelo `commit_ref` com o HEAD atual de `main` antes de qualquer homologação.
+- Enquanto o Netlify estiver em commit anterior ao HEAD do GitHub, considerar produção **desatualizada** e não iniciar homologação oficial.
+- Após sincronizar, validar quantidade de Functions, agendamentos dos workers, secret scan e ausência de HTTP 5xx.
+
+## Onboarding do número oficial
+
+A documentação oficial atual da WhatsApp Business Platform confirma que o uso da Cloud API exige WABA, número comercial, registro do número e obtenção do Phone Number ID. O processo de registro pode alterar o estado operacional do número. Portanto:
+
+- não registrar, migrar, desregistrar ou substituir o número oficial enquanto o WhatsApp Business atual estiver em uso diário;
+- confirmar a modalidade vigente de coexistência/onboarding na documentação Meta aplicável à conta antes do cutover;
+- manter `WHATSAPP_OUTBOUND_MODE=disabled` e `WHATSAPP_PRODUCTION_ENABLED=false` mesmo após obter o Phone Number ID, até a homologação controlada;
+- qualquer teste com o remetente oficial deve usar números internos autorizados e possuir plano de retorno ao modo fail-closed.
+
 ## Bloqueadores para go-live
 
-1. Templates Meta aprovados.
-2. Estratégia oficial de coexistência/onboarding para o número +55 15 99673-4292 confirmada com documentação Meta vigente.
-3. Phone Number ID oficial obtido sem interromper o WhatsApp Business em uso diário.
-4. Homologação controlada com números internos.
-5. Webhook/status/inbound comprovados com o remetente oficial.
-6. Validação de ponta a ponta: atendimento concluído → pesquisa → resposta → recuperação ou convite neutro.
-7. Rotação/armazenamento seguro de credenciais que não estejam marcadas como segredo.
-8. Repositório tornado privado e branch principal protegida, quando a administração do GitHub permitir.
-9. Backup recente e procedimento de rollback conferidos antes da ativação.
+1. Netlify sincronizado com o HEAD validado de `main`.
+2. Templates Meta aprovados.
+3. Estratégia oficial de coexistência/onboarding para o número +55 15 99673-4292 confirmada com documentação Meta vigente.
+4. Phone Number ID oficial obtido sem interromper o WhatsApp Business em uso diário.
+5. Homologação controlada com números internos.
+6. Webhook/status/inbound comprovados com o remetente oficial.
+7. Validação de ponta a ponta: atendimento concluído → pesquisa → resposta → recuperação ou convite neutro.
+8. Rotação/armazenamento seguro de credenciais que não estejam marcadas como segredo.
+9. Repositório tornado privado e branch principal protegida, quando a administração do GitHub permitir.
+10. Backup recente e procedimento de rollback conferidos antes da ativação.
 
 ## Sequência de homologação futura
 
-1. Confirmar status aprovado dos dois templates.
-2. Conferir nomes/idiomas/componentes aprovados sem editar produção.
-3. Pesquisar documentação oficial Meta vigente sobre coexistência do WhatsApp Business App e Cloud API.
-4. Preparar onboarding do número oficial sem executar cutover destrutivo.
-5. Obter Phone Number ID oficial.
-6. Configurar ID oficial mantendo `WHATSAPP_OUTBOUND_MODE=disabled` e `WHATSAPP_PRODUCTION_ENABLED=false`.
-7. Fazer teste de webhook e configuração sem outbound real.
-8. Autorizar janela de homologação com números internos.
-9. Habilitar somente o mínimo necessário para um teste controlado.
-10. Validar provider message id, status `sent/delivered/read`, inbound e deduplicação.
-11. Restaurar travas se qualquer etapa for ambígua.
-12. Só depois planejar ativação gradual para clientes reais.
+1. Confirmar Netlify no mesmo commit validado de `main`.
+2. Confirmar status aprovado dos dois templates.
+3. Conferir nomes/idiomas/componentes aprovados sem editar produção.
+4. Pesquisar documentação oficial Meta vigente sobre coexistência do WhatsApp Business App e Cloud API.
+5. Preparar onboarding do número oficial sem executar cutover destrutivo.
+6. Obter Phone Number ID oficial.
+7. Configurar ID oficial mantendo `WHATSAPP_OUTBOUND_MODE=disabled` e `WHATSAPP_PRODUCTION_ENABLED=false`.
+8. Fazer teste de webhook e configuração sem outbound real.
+9. Autorizar janela de homologação com números internos.
+10. Habilitar somente o mínimo necessário para um teste controlado.
+11. Validar provider message id, status `sent/delivered/read`, inbound e deduplicação.
+12. Restaurar travas se qualquer etapa for ambígua.
+13. Só depois planejar ativação gradual para clientes reais.
 
 ## Critérios de rollback
 
