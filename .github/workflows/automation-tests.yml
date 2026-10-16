@@ -81,3 +81,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610160005_followup_source_integrity.sql
       - name: Test main CRM follow-up trigger
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/main-crm-followup-trigger.sql
+      - name: Apply Supabase advisor hardening
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610160006_supabase_advisor_hardening.sql
+      - name: Test Supabase advisor hardening
+        run: psql -v ON_ERROR_STOP=1 -f tests/sql/supabase-advisor-hardening.sql
