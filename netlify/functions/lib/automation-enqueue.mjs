@@ -1,9 +1,8 @@
 import { toAutomationCommand } from './automation-event-adapter.mjs';
+import { crmDatabaseConfig } from './crm-database.mjs';
 
 function config() {
-  const base = (process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
-  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-  if (!base || !key || key.startsWith('sb_publishable_')) throw new Error('Supabase server credentials are unavailable.');
+  const { url: base, key } = crmDatabaseConfig(process.env);
   return { base, key };
 }
 
