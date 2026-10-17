@@ -266,7 +266,7 @@ function renderLeadTable(){
 function newLead(){editLead(null)}
 function editLead(id0){
  const l=id0?state.leads.find(x=>x.id===id0):{id:id(),name:"",phone:"",email:"",service:"Pilates",source:"WhatsApp",campaign:"",status:"Novo lead",temperature:"Morno",notes:"",createdAt:new Date().toISOString(),interest:false,priceAsked:false,requestedTime:false,appointment:false,attended:false,bought:false};
- modal(id0?"Editar lead":"Novo lead",`<form id="leadForm" class="form">
+ modal(id0?"Ficha do lead":"Novo lead",`${id0?'<section id="leadExperience" class="section" aria-live="polite"><h3>Pesquisa e recuperação</h3><p class="muted">Carregando histórico…</p></section>':''}<form id="leadForm" class="form">
  <div><label>Nome *</label><input name="name" required value="${esc(l.name)}"></div>
  <div><label>WhatsApp / telefone *</label><input name="phone" required value="${esc(l.phone)}"></div>
  <div><label>E-mail</label><input name="email" value="${esc(l.email)}"></div>
@@ -279,7 +279,25 @@ function editLead(id0){
  <div class="full"><label>Indicadores de intenção</label><div class="toolbar">${["interest","priceAsked","requestedTime","appointment","attended","bought"].map(k=>`<label style="font-weight:500"><input type="checkbox" name="${k}" ${l[k]?"checked":""} style="width:auto"> ${({interest:"Demonstrou interesse",priceAsked:"Perguntou preço",requestedTime:"Pediu horário",appointment:"Agendou",attended:"Compareceu",bought:"Comprou"})[k]}</label>`).join("")}</div></div>
  <div class="full toolbar"><button class="btn primary" type="submit">Salvar lead</button>${id0?`<button class="btn" type="button" onclick="wa('${l.phone}')">💬 WhatsApp</button><button class="btn danger" type="button" onclick="deleteLead('${l.id}')">Excluir</button>`:""} </div>
  </form>`);
+ if(id0)loadLeadExperience(l.id);
  document.getElementById("leadForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const x={...l,name:f.get("name").trim(),phone:f.get("phone").trim(),email:f.get("email").trim(),service:f.get("service"),source:f.get("source"),campaign:f.get("campaign"),status:f.get("status"),temperature:f.get("temperature"),notes:f.get("notes"),createdAt:l.createdAt||new Date().toISOString()};["interest","priceAsked","requestedTime","appointment","attended","bought"].forEach(k=>x[k]=f.get(k)==="on");if(id0){state.leads=state.leads.map(a=>a.id===l.id?x:a)}else state.leads.unshift(x);await saveStore();closeModal();toast("Lead salvo com sucesso");render()};
+}
+function experienceHistoryHtml(items){
+ const statusLabels={pending_send:"Pesquisa aguardando envio",awaiting_response:"Aguardando resposta",recovery_required:"Recuperação aguardando preparação",recovery_in_progress:"Recuperação em atendimento",recovery_resolved:"Recuperação tratada",review_pending:"Convite de avaliação preparado",review_invited:"Convite de avaliação enviado"};
+ const answers={very_good:"Excelente",good:"Boa",needs_improvement:"Poderia melhorar"};
+ const outcomes={resolved:"Problema tratado / experiência recuperada",unresolved:"Atendimento encerrado sem solução",rescheduled:"Contato reagendado"};
+ const when=value=>{const date=new Date(value);return value&&Number.isFinite(date.getTime())?date.toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"}):"—"};
+ if(!items.length)return '<p class="muted">Nenhuma pesquisa ou recuperação vinculada a este lead.</p>';
+ return items.map(item=>`<article style="border-top:1px solid var(--line);padding:12px 0"><b>${esc(item.service_name||"Atendimento")}</b><p><span class="badge">${esc(statusLabels[item.status]||"Em acompanhamento")}</span></p><p>Resposta: <b>${esc(answers[item.satisfaction]||"Ainda não recebida")}</b>${item.responded_at?` • ${esc(when(item.responded_at))}`:""}</p>${item.response_text?`<p class="muted">${esc(item.response_text)}</p>`:""}${item.recovery_opened_at?`<p>Recuperação aberta: ${esc(when(item.recovery_opened_at))}</p>`:""}${item.recovery_outcome?`<p>Resultado: ${esc(outcomes[item.recovery_outcome]||item.recovery_outcome)}</p>`:""}${item.recovery_note?`<p>Registro do atendimento: ${esc(item.recovery_note)}</p>`:""}${item.review_invited_at?`<p class="muted">Convite enviado em ${esc(when(item.review_invited_at))}</p>`:""}${item.recovery_queue_status==="awaiting_operator"&&/^[0-9a-f-]{36}$/i.test(item.recovery_queue_id||"")?`<a class="btn primary" href="/followups?case=${encodeURIComponent(item.recovery_queue_id)}">Registrar atendimento da recuperação</a>`:""}</article>`).join("");
+}
+async function loadLeadExperience(leadId){
+ const panel=document.getElementById("leadExperience");if(!panel)return;
+ try{
+  const response=await fetch(API_URL+"?action=lead-experience&leadId="+encodeURIComponent(leadId),{credentials:"same-origin",headers:{Accept:"application/json"}});
+  const data=await response.json();if(!response.ok)throw new Error(data.error||"Não foi possível carregar o histórico.");
+  if(!panel.isConnected)return;
+  panel.innerHTML='<h3>Pesquisa e recuperação</h3>'+(data.phoneAssociationAmbiguous?'<p class="muted">O telefone não permite uma associação única. Exibimos apenas os registros vinculados ao cadastro.</p>':'')+experienceHistoryHtml(Array.isArray(data.items)?data.items:[]);
+ }catch(error){if(panel.isConnected)panel.innerHTML='<h3>Pesquisa e recuperação</h3><p class="muted">'+esc(error.message)+'</p>'}
 }
 function deleteLead(id0){if(confirm("Excluir este lead?")){state.leads=state.leads.filter(x=>x.id!==id0);saveStore();closeModal();render()}}
 function moveLead(id0){const l=state.leads.find(x=>x.id===id0);modal("Mover lead",`<label>Nova etapa</label><select id="moveStage">${stages.map(s=>`<option ${s===l.status?"selected":""}>${s}</option>`).join("")}</select><div style="margin-top:12px"><button class="btn primary" onclick="applyMove('${id0}')">Salvar etapa</button></div>`)}
@@ -456,3 +474,4 @@ document.getElementById("nav").addEventListener("click",e=>{const b=e.target.clo
 </script>
 </body>
 </html><script async src="/.netlify/scripts/hud?variant=public" data-nf-variant="public" data-netlify-site-id="5a9e4ca2-3560-4d14-a1e6-28abfcf1580d" data-app-host="app.netlify.com"></script>
+

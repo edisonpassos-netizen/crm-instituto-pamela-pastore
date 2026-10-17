@@ -71,6 +71,8 @@ const API='/.netlify/functions/crm-state';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $=id=>document.getElementById(id);
 let items=[];
+const requestedCase=new URLSearchParams(location.search).get("case");
+let caseOpened=false;
 let crmState=null;
 let revision=null;
 
@@ -145,10 +147,11 @@ $('createForm').addEventListener('submit',async event=>{
 async function loadQueue(){
   $('queue').innerHTML='<div class="empty">Atualizando fila…</div>';$('status').textContent='Conectado';
   try{
-    const data=await api('automation-queue');items=Array.isArray(data.items)?data.items:[];
-    if(!items.length){$('queue').innerHTML='<div class="empty">Nenhuma tarefa aguardando ação manual.</div>';return}
+    const data=await request(`${API}?action=automation-queue${requestedCase?'&queueId='+encodeURIComponent(requestedCase):''}`);items=Array.isArray(data.items)?data.items:[];
+    if(!items.length){$('queue').innerHTML=requestedCase?'<div class="empty">Este caso não está aguardando atendimento. <a href="/followups">Ver fila completa</a></div>':'<div class="empty">Nenhuma tarefa aguardando ação manual.</div>';return}
     $('queue').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Data / horário</th><th>Cliente</th><th>Telefone</th><th>Serviço</th><th>Observação</th><th>Ação</th></tr></thead><tbody>${items.map(item=>{const d=item.payload?.dispatch||{};const recovery=isRecovery(item);const when=d.task_date?`${d.task_date}${d.task_time?' • '+d.task_time:''}`:String(item.scheduled_at||'').slice(0,16).replace('T',' ');return `<tr><td><span class="badge ${recovery?'recovery':''}">${recovery?'Recuperação de experiência':'Follow-up'}</span></td><td>${esc(when||'-')}</td><td><b>${esc(d.lead_name||'Cliente')}</b></td><td>${esc(d.recipient_phone||'Não informado')}</td><td>${esc(d.service_name||d.task_type||'-')}</td><td>${esc(d.note||'')}</td><td><button class="btn primary" data-id="${esc(item.id)}">Registrar resultado</button></td></tr>`}).join('')}</tbody></table></div>`;
     $('queue').querySelectorAll('button[data-id]').forEach(button=>button.addEventListener('click',()=>openResult(button.dataset.id)));
+    if(requestedCase&&!caseOpened&&items.some(item=>item.id===requestedCase&&isRecovery(item))){caseOpened=true;openResult(requestedCase)}
   }catch(error){$('queue').innerHTML=`<div class="empty error">${esc(error.message)}</div>`;$('status').textContent='Erro de conexão';if(error.status===401)await boot()}
 }
 
