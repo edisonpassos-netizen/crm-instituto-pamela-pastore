@@ -1,6 +1,19 @@
 # Production Readiness — CRM Instituto Pâmela Pastore
 
-Atualizado em 16/10/2026.
+Atualizado em 17/10/2026.
+
+## Conferência de 17/10/2026
+
+- A publicação de produção `6ad2936dfc6b68365b11b52e` corresponde ao commit `f76f816ff157e8673d3240f4c331adfda32379f9`, HEAD de `main` no início desta conferência. A Central Operacional e os dois workers agendados estão incluídos nessa publicação.
+- Os dois workflows desse commit terminaram com sucesso. Os 91 testes Node também passaram na conferência local.
+- A conferência somente de leitura no banco exclusivo do CRM confirmou RLS nas cinco tabelas públicas e ausência de SELECT para `anon` e `authenticated`.
+- As configurações consultadas mantêm automações externas e produção do WhatsApp desligadas. Não houve envio de mensagem nesta conferência.
+- Há quatro registros históricos em `dead_letter`: três follow-ups internos por telefone ausente ou inválido e um teste de homologação WhatsApp com erro 401/190. Preservar o histórico; corrigir os cadastros com dados confirmados antes de resolver ou reagendar os follow-ups. O erro histórico não comprova que a credencial atual esteja inválida.
+- Não há experiências registradas nem jobs externos pendentes, em processamento ou retry nessa consulta. Isso não substitui homologação de ponta a ponta.
+- Os dois templates continuam em análise, conforme conferência do usuário na Meta em 17/10/2026.
+- A CI de integração passa a executar também a migration e o teste SQL já existentes para provar que o claim interno não captura jobs WhatsApp ou Google. O job de unidade passa a incluir todos os testes Node, incluindo isolamento e reconciliador.
+
+Esta conferência não altera cadastros, filas, credenciais ou a Agenda Pilates. Após qualquer novo commit, comparar novamente o HEAD e a publicação antes de homologar produção.
 
 ## Estado operacional seguro
 

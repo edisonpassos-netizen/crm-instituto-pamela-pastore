@@ -19,7 +19,7 @@ jobs:
       - name: Check worker and API syntax
         run: node --check netlify/functions/automation-worker.mjs && node --check netlify/functions/lib/automation-event-adapter.mjs && node --check netlify/functions/lib/automation-enqueue.mjs && node --check netlify/functions/lib/customer-experience.mjs && node --check netlify/functions/lib/followup-schedule.mjs && node --check netlify/functions/lib/whatsapp-outbound-config.mjs && node --check netlify/functions/crm-state.mjs && node --check netlify/functions/whatsapp-status-webhook.mjs
       - name: Run automation unit, lifecycle, experience and operator page tests
-        run: node --test tests/automation-worker.test.mjs tests/automation-lifecycle.test.mjs tests/automation-event-adapter.test.mjs tests/automation-crm-integration.test.mjs tests/customer-experience.test.mjs tests/followup-schedule.test.mjs tests/satisfaction-quick-replies.test.mjs tests/whatsapp-missing-message-id.test.mjs tests/whatsapp-api-mock.test.mjs tests/whatsapp-status-webhook.test.mjs tests/automation-operator-queue.test.mjs tests/followups-page.test.mjs tests/attendances-page.test.mjs tests/automation-schedule.test.mjs
+        run: node --test tests/*.test.mjs
 
   database-integration:
     runs-on: ubuntu-latest
@@ -89,3 +89,7 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610160007_followup_time_support.sql
       - name: Test follow-up time support
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/followup-time-support.sql
+      - name: Apply internal-only worker claim
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610150001_claim_internal_automation_jobs.sql
+      - name: Verify internal worker cannot claim WhatsApp or Google review jobs
+        run: psql -v ON_ERROR_STOP=1 -f tests/sql/internal-claim-isolation.sql

@@ -12,17 +12,25 @@ select id, channel from public.claim_due_internal_automation_jobs(10);
 
 do $$
 begin
-  if (select count(*) from claimed_internal) <> 1 then
-    raise exception 'internal claim must return exactly one internal job';
+  -- Other integration checks may leave valid internal jobs in this database.
+  -- Require our fixture and validate every claimed channel, without assuming
+  -- this test owns all queue rows.
+  if (select count(*) from claimed_internal where id='22222222-2222-4222-8222-222222222221') <> 1 then
+    raise exception 'internal claim must return the internal fixture';
   end if;
   if exists (select 1 from claimed_internal where channel <> 'internal') then
     raise exception 'internal claim returned an external channel';
   end if;
-  if (select status from public.crm_automation_queue where id='22222222-2222-4222-8222-222222222222') <> 'pending' then
+  if (select status from public.crm_automation_queue where id='22222222-2222-4222-8222-222222222222') is distinct from 'pending' then
     raise exception 'WhatsApp job was modified by internal claim';
   end if;
-  if (select status from public.crm_automation_queue where id='22222222-2222-4222-8222-222222222223') <> 'pending' then
+  if (select status from public.crm_automation_queue where id='22222222-2222-4222-8222-222222222223') is distinct from 'pending' then
     raise exception 'Google review job was modified by internal claim';
+  end if;
+  if has_function_privilege('anon', 'public.claim_due_internal_automation_jobs(integer)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.claim_due_internal_automation_jobs(integer)', 'EXECUTE')
+     or not has_function_privilege('service_role', 'public.claim_due_internal_automation_jobs(integer)', 'EXECUTE') then
+    raise exception 'internal claim must be restricted to the server role';
   end if;
 end $$;
 
