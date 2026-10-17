@@ -210,11 +210,54 @@ export default async request => {
     return validSession(request) ? json(200, { authenticated: true }, cors) : json(401, { authenticated: false }, cors);
   }
 
+  if (action === 'lead-experience' && request.method === 'GET') {
+    if (!validSession(request)) return json(401, { error: 'Sessão expirada ou não autenticada.' }, cors);
+    const leadId = String(url.searchParams.get('leadId') || '').trim();
+    if (!leadId || leadId.length > 160) return json(400, { error: 'Lead inválido.' }, cors);
+    try {
+      const stateRows = await supabaseRequest('GET', '?id=eq.main&select=data');
+      const data = stateRows?.[0]?.data;
+      const leads = Array.isArray(data?.leads) ? data.leads : [];
+      const lead = leads.find(item => String(item?.id || '') === leadId);
+      if (!lead) return json(404, { error: 'Lead não encontrado.' }, cors);
+      const phone = String(lead.phone || '').replace(/\D/g, '');
+      const uniquePhone = phone.length >= 10 && phone.length <= 15
+        && leads.filter(item => String(item?.phone || '').replace(/\D/g, '') === phone).length === 1;
+      const fields = 'id,customer_id,source_type,source_id,service_name,status,satisfaction,response_text,requested_at,responded_at,recovery_queue_id,recovery_outcome,recovery_note,recovery_opened_at,recovery_resolved_at,review_invited_at,created_at';
+      // Quote persisted identifiers as PostgREST literals, never as filter grammar.
+      const exact = await supabaseAutomationRequest(`crm_customer_experience?customer_id=eq.${encodeURIComponent(JSON.stringify(leadId))}&select=${fields}&order=created_at.desc&limit=50`);
+      let fallback = [];
+      if (uniquePhone) {
+        fallback = await supabaseAutomationRequest(`crm_customer_experience?recipient_phone=eq.${phone}&customer_id=is.null&select=${fields}&order=created_at.desc&limit=50`);
+      }
+      const attendanceIds = new Set((Array.isArray(data?.attendances) ? data.attendances : [])
+        .filter(item => String(item?.leadId || '') === leadId).map(item => String(item.id)));
+      const rows = [...(Array.isArray(exact) ? exact : []), ...(Array.isArray(fallback) ? fallback : [])]
+        .filter(item => item.customer_id === leadId || (!item.customer_id && (
+          item.source_type !== 'attendance' || attendanceIds.has(String(item.source_id)))))
+        .filter((item, index, all) => all.findIndex(other => other.id === item.id) === index)
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 50);
+      const queueIds = rows.map(item => item.recovery_queue_id).filter(id => /^[0-9a-f-]{36}$/i.test(id || ''));
+      const queueRows = queueIds.length ? await supabaseAutomationRequest(`crm_automation_queue?id=in.(${queueIds.join(',')})&select=id,status`) : [];
+      const items = rows.map(({ customer_id, source_type, source_id, ...item }) => ({
+        ...item,
+        recovery_queue_status: (Array.isArray(queueRows) ? queueRows : []).find(q => q.id === item.recovery_queue_id)?.status || null
+      }));
+      return json(200, { items, phoneAssociationAmbiguous: Boolean(phone && !uniquePhone) }, cors);
+    } catch (error) {
+      return json(error?.status || 500, { error: 'Não foi possível carregar o histórico de experiência.' }, cors);
+    }
+  }
+
   if (action === 'automation-queue' && request.method === 'GET') {
     if (!validSession(request)) return json(401, { error: 'Sessão expirada ou não autenticada.' }, cors);
+    const queueId = url.searchParams.get('queueId');
+    if (queueId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(queueId)) {
+      return json(400, { error: 'Caso inválido.' }, cors);
+    }
     try {
       const rows = await supabaseAutomationRequest(
-        'crm_automation_queue?status=eq.awaiting_operator&select=id,event_type,source_type,source_id,payload,scheduled_at,created_at,attempts&order=scheduled_at.asc&limit=100'
+        'crm_automation_queue?status=eq.awaiting_operator' + (queueId ? `&id=eq.${queueId}` : '') + '&select=id,event_type,source_type,source_id,payload,scheduled_at,created_at,attempts&order=scheduled_at.asc&limit=100'
       );
       return json(200, { items: Array.isArray(rows) ? rows : [] }, cors);
     } catch (error) {
@@ -358,3 +401,4 @@ export default async request => {
 };
 
 export const __test = { businessRecordCount, wouldEraseAllBusinessData };
+
