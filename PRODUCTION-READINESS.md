@@ -4,14 +4,14 @@ Atualizado em 17/10/2026.
 
 ## Conferência de 17/10/2026
 
-- A publicação de produção `6ad2936dfc6b68365b11b52e` corresponde ao commit `f76f816ff157e8673d3240f4c331adfda32379f9`, HEAD de `main` no início desta conferência. A Central Operacional e os dois workers agendados estão incluídos nessa publicação.
-- Os dois workflows desse commit terminaram com sucesso. Os 91 testes Node também passaram na conferência local.
-- A conferência somente de leitura no banco exclusivo do CRM confirmou RLS nas cinco tabelas públicas e ausência de SELECT para `anon` e `authenticated`.
+- A publicação de produção está sincronizada com o HEAD validado de `main`; a Central Operacional e os dois workers agendados estão incluídos.
+- Os dois workflows do commit publicado terminaram com sucesso.
+- A conferência somente de leitura no banco exclusivo do CRM confirmou RLS nas tabelas públicas e ausência de SELECT para `anon` e `authenticated`.
 - As configurações consultadas mantêm automações externas e produção do WhatsApp desligadas. Não houve envio de mensagem nesta conferência.
-- Há quatro registros históricos em `dead_letter`: três follow-ups internos por telefone ausente ou inválido e um teste de homologação WhatsApp com erro 401/190. Preservar o histórico; corrigir os cadastros com dados confirmados antes de resolver ou reagendar os follow-ups. O erro histórico não comprova que a credencial atual esteja inválida.
+- Há quatro registros históricos em `dead_letter`: três follow-ups internos por telefone ausente ou inválido e um teste de homologação WhatsApp. Preservar o histórico; corrigir os cadastros com dados confirmados antes de resolver ou reagendar os follow-ups.
 - Não há experiências registradas nem jobs externos pendentes, em processamento ou retry nessa consulta. Isso não substitui homologação de ponta a ponta.
-- Os dois templates continuam em análise, conforme conferência do usuário na Meta em 17/10/2026.
-- A CI de integração passa a executar também a migration e o teste SQL já existentes para provar que o claim interno não captura jobs WhatsApp ou Google. O job de unidade passa a incluir todos os testes Node, incluindo isolamento e reconciliador.
+- Os dois templates oficiais foram aprovados pela Meta em 17/10/2026, conforme confirmação do usuário.
+- A CI de integração prova que o claim interno não captura jobs WhatsApp ou Google; o job de unidade inclui isolamento do banco e reconciliador.
 
 Esta conferência não altera cadastros, filas, credenciais ou a Agenda Pilates. Após qualquer novo commit, comparar novamente o HEAD e a publicação antes de homologar produção.
 
@@ -48,59 +48,56 @@ Nenhuma etapa deste documento autoriza migração do número oficial, envio real
 - CI em Node 24 e PostgreSQL 16 efêmero.
 - CSP, HSTS, anti-framing e demais headers de segurança do frontend.
 
-## Templates aguardando Meta
+## Templates Meta aprovados
 
-- `pesquisa_experiencia_pos_atendimento_v1` — `pt_BR` — em análise.
+- `pesquisa_experiencia_pos_atendimento_v1` — `pt_BR` — aprovado.
   - respostas: Excelente / Boa / Poderia melhorar;
   - payloads: `experience_very_good`, `experience_good`, `experience_needs_improvement`.
-- `avaliacao_google_pos_atendimento_v1` — `pt_BR` — em análise.
+- `avaliacao_google_pos_atendimento_v1` — `pt_BR` — aprovado.
 
-O backend deve usar os nomes exatos aprovados pela Meta. Se a Meta alterar categoria, nome, idioma ou componentes, revisar configuração e testes antes de qualquer ativação.
+O backend deve usar os nomes exatos aprovados pela Meta. Se a Meta alterar categoria, nome, idioma ou componentes no futuro, revisar configuração e testes antes de qualquer ativação.
 
 ## Sincronização GitHub → Netlify
 
 - `main` contém as correções mais recentes e a Central Operacional.
 - A publicação Netlify deve sempre ser comparada pelo `commit_ref` com o HEAD atual de `main` antes de qualquer homologação.
-- Enquanto o Netlify estiver em commit anterior ao HEAD do GitHub, considerar produção **desatualizada** e não iniciar homologação oficial.
+- Enquanto o Netlify estiver em commit anterior ao HEAD do GitHub, considerar produção desatualizada e não iniciar homologação oficial.
 - Após sincronizar, validar quantidade de Functions, agendamentos dos workers, secret scan e ausência de HTTP 5xx.
 
 ## Onboarding do número oficial
 
 A documentação oficial atual da WhatsApp Business Platform confirma que o uso da Cloud API exige WABA, número comercial, registro do número e obtenção do Phone Number ID. O processo de registro pode alterar o estado operacional do número. Portanto:
 
-- não registrar, migrar, desregistrar ou substituir o número oficial enquanto o WhatsApp Business atual estiver em uso diário;
+- não registrar, migrar, desregistrar ou substituir o número oficial enquanto o WhatsApp Business atual estiver em uso diário sem validar o caminho de onboarding aplicável à conta;
 - confirmar a modalidade vigente de coexistência/onboarding na documentação Meta aplicável à conta antes do cutover;
 - manter `WHATSAPP_OUTBOUND_MODE=disabled` e `WHATSAPP_PRODUCTION_ENABLED=false` mesmo após obter o Phone Number ID, até a homologação controlada;
 - qualquer teste com o remetente oficial deve usar números internos autorizados e possuir plano de retorno ao modo fail-closed.
 
 ## Bloqueadores para go-live
 
-1. Netlify sincronizado com o HEAD validado de `main`.
-2. Templates Meta aprovados.
-3. Estratégia oficial de coexistência/onboarding para o número +55 15 99673-4292 confirmada com documentação Meta vigente.
-4. Phone Number ID oficial obtido sem interromper o WhatsApp Business em uso diário.
-5. Homologação controlada com números internos.
-6. Webhook/status/inbound comprovados com o remetente oficial.
-7. Validação de ponta a ponta: atendimento concluído → pesquisa → resposta → recuperação ou convite neutro.
-8. Rotação/armazenamento seguro de credenciais que não estejam marcadas como segredo.
-9. Repositório tornado privado e branch principal protegida, quando a administração do GitHub permitir.
-10. Backup recente e procedimento de rollback conferidos antes da ativação.
+1. Estratégia oficial de coexistência/onboarding para o número +55 15 99673-4292 confirmada no fluxo aplicável à conta.
+2. Phone Number ID oficial obtido sem interromper o WhatsApp Business em uso diário.
+3. Homologação controlada com números internos.
+4. Webhook/status/inbound comprovados com o remetente oficial.
+5. Validação de ponta a ponta: atendimento concluído → pesquisa → resposta → recuperação ou convite neutro.
+6. Rotação/armazenamento seguro de credenciais que não estejam marcadas como segredo.
+7. Repositório tornado privado e branch principal protegida, quando a administração do GitHub permitir.
+8. Backup recente e procedimento de rollback conferidos antes da ativação.
 
 ## Sequência de homologação futura
 
 1. Confirmar Netlify no mesmo commit validado de `main`.
-2. Confirmar status aprovado dos dois templates.
-3. Conferir nomes/idiomas/componentes aprovados sem editar produção.
-4. Pesquisar documentação oficial Meta vigente sobre coexistência do WhatsApp Business App e Cloud API.
-5. Preparar onboarding do número oficial sem executar cutover destrutivo.
-6. Obter Phone Number ID oficial.
-7. Configurar ID oficial mantendo `WHATSAPP_OUTBOUND_MODE=disabled` e `WHATSAPP_PRODUCTION_ENABLED=false`.
-8. Fazer teste de webhook e configuração sem outbound real.
-9. Autorizar janela de homologação com números internos.
-10. Habilitar somente o mínimo necessário para um teste controlado.
-11. Validar provider message id, status `sent/delivered/read`, inbound e deduplicação.
-12. Restaurar travas se qualquer etapa for ambígua.
-13. Só depois planejar ativação gradual para clientes reais.
+2. Conferir nomes/idiomas/componentes aprovados sem editar produção.
+3. Confirmar documentação/fluxo Meta vigente para onboarding do número oficial.
+4. Preparar onboarding do número oficial sem executar cutover destrutivo.
+5. Obter Phone Number ID oficial.
+6. Configurar ID oficial mantendo `WHATSAPP_OUTBOUND_MODE=disabled` e `WHATSAPP_PRODUCTION_ENABLED=false`.
+7. Fazer teste de webhook e configuração sem outbound real.
+8. Autorizar janela de homologação com números internos.
+9. Habilitar somente o mínimo necessário para um teste controlado.
+10. Validar provider message id, status `sent/delivered/read`, inbound e deduplicação.
+11. Restaurar travas se qualquer etapa for ambígua.
+12. Só depois planejar ativação gradual para clientes reais.
 
 ## Critérios de rollback
 
