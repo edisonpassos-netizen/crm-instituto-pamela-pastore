@@ -93,3 +93,9 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610150001_claim_internal_automation_jobs.sql
       - name: Verify internal worker cannot claim WhatsApp or Google review jobs
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/internal-claim-isolation.sql
+
+      - name: Apply first response protection
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261017204238_first_customer_experience_response.sql
+      - name: Test first response protection and survey correlation
+        run: psql -v ON_ERROR_STOP=1 -f tests/sql/first-experience-response.sql
+
