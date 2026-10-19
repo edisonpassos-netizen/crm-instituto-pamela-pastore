@@ -120,6 +120,7 @@ try{
   assert.equal(sql("select count(*) from crm_app_state,jsonb_array_elements(data->'leads') l where l->>'name'='QA Offline Only'"),'0');
  });
  await check('lost save response preserves one committed record without duplicate retry',async()=>{
+  await page.getByRole('button',{name:'👥 Leads',exact:true}).click();
   await page.evaluate(()=>saveQueue);
   let lost=false;
   const intercept=async route=>{
