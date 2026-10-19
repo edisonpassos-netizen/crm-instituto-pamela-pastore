@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_PASSWORD: test-only-password
           POSTGRES_DB: automation_test
@@ -99,3 +99,32 @@ jobs:
       - name: Test first response protection and survey correlation
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/first-experience-response.sql
 
+      - name: Export and compare effective schema definitions
+        run: |
+          psql -X -t -A -v ON_ERROR_STOP=1 -f tests/sql/schema-manifest.sql > /tmp/crm-ephemeral-schema.json
+          node tests/e2e/schema-compare.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install pinned test-only browser dependency
+        run: |
+          npm install --prefix /tmp/crm-qa --ignore-scripts playwright@1.62.1
+          /tmp/crm-qa/node_modules/.bin/playwright install --with-deps chromium
+      - name: Start isolated PostgREST and application
+        run: |
+          docker run -d --name crm-e2e-rest --network host -e PGRST_DB_URI=postgres://postgres:test-only-password@127.0.0.1:5432/automation_test -e PGRST_DB_ANON_ROLE=anon -e PGRST_DB_SCHEMAS=public -e PGRST_JWT_SECRET=ephemeral-jwt-signing-key-for-crm-e2e-only postgrest/postgrest:v12.2.3
+          for attempt in $(seq 1 30); do curl --fail --silent http://127.0.0.1:3000/ > /dev/null && break; sleep 1; done
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/crm-e2e-key.pem -out /tmp/crm-e2e-cert.pem -days 1 -subj /CN=localhost
+          node tests/e2e/server.mjs > /tmp/crm-e2e-server.log 2>&1 &
+          for attempt in $(seq 1 20); do curl --insecure --fail --silent https://localhost:8443/ > /dev/null && break; sleep 1; done
+      - name: Run browser to real backend to PostgreSQL 17 tests
+        run: node tests/e2e/browser.mjs
+      - name: Upload isolated schema and application diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crm-isolated-e2e-diagnostics
+          path: |
+            /tmp/crm-schema-diff.json
+            /tmp/crm-ephemeral-schema.json
+            /tmp/crm-e2e-server.log
