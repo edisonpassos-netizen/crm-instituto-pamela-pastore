@@ -142,3 +142,8 @@ Este relatório distingue os resultados desta sessão de afirmações anteriores
 ## Verificação complementar final
 
 O mock de rejeição WhatsApp passou para HTTP 400, 401, 403, 429 e 500; total permanece 106 casos Node. As novas execuções de CI do commit `1d54a9f30648d94c924dbcecdca1fbbaa253e8ed` estão em https://github.com/edisonpassos-netizen/crm-instituto-pamela-pastore/actions/runs/39304512921 e https://github.com/edisonpassos-netizen/crm-instituto-pamela-pastore/actions/runs/39304512825 . A consulta final de leitura manteve revisão 42, fila 20 e tentativas 22.
+
+
+## Continuação posterior nesta data
+
+Consulte [CONTINUIDADE-20261019.md](CONTINUIDADE-20261019.md): a continuação concluiu 16 cenários E2E reais em PostgreSQL 17.11 e mantém o resultado histórico acima sem reescrevê-lo. O HTTP 500 segue sem causa comprovada, a operação offline não está homologada e a produção não foi atualizada.
