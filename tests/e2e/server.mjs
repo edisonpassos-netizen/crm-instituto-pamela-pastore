@@ -29,6 +29,7 @@ globalThis.fetch = (input, options) => {
   return networkFetch(`http://127.0.0.1:3000/${url.pathname.slice('/rest/v1/'.length)}${url.search}`, options);
 };
 const { default: handler } = await import('../../netlify/functions/crm-state.mjs');
+const { default: worker } = await import('../../netlify/functions/automation-worker.mjs');
 const pages = new Map([['/','index.html'],['/followups','followups-operacionais.html'],['/atendimentos','atendimentos-operacionais.html'],['/operacao','operacao.html']]);
 const server = https.createServer({key:await readFile('/tmp/crm-e2e-key.pem'),cert:await readFile('/tmp/crm-e2e-cert.pem')},async(req,res)=>{
   try {
@@ -38,6 +39,12 @@ const server = https.createServer({key:await readFile('/tmp/crm-e2e-key.pem'),ce
       const body=Buffer.concat(chunks);
       const response=await handler(new Request(url,{method:req.method,headers:req.headers,...(body.length?{body}: {})}));
       res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));return;
+    }
+    if(url.pathname==='/__qa/worker'&&req.method==='POST'){
+      process.env.INTERNAL_AUTOMATIONS_ENABLED='true';
+      try { const response=await worker();res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer())); }
+      finally { process.env.INTERNAL_AUTOMATIONS_ENABLED='false'; }
+      return;
     }
     const file=pages.get(url.pathname);
     if(!file){res.writeHead(404);res.end();return;}

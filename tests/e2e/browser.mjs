@@ -70,11 +70,12 @@ try{
   assert.equal(sql("select count(*) from crm_customer_experience where source_type='attendance' and source_id=(select data->'attendances'->0->>'id' from crm_app_state)"),'0');
  });
  await check('operator queue UI reschedules a task atomically',async()=>{
-  // A synthetic fixture enters the operator-ready state; no production worker is invoked.
+  // Run the real worker against local PostgREST; every external destination remains blocked.
   const base=await cloud(page);const id=crypto.randomUUID();
   base.data.data.tasks.push({id,leadId:base.data.data.leads[0].id,date:'2026-10-19',time:'09:00',type:'Retorno',done:false,note:'QA operator fixture'});
   assert.equal((await cloud(page,'PUT',{data:base.data.data,revision:base.data.revision})).status,200);
-  sql("update crm_automation_queue set status='awaiting_operator' where source_type='task' and source_id='"+id+"'");
+  const workerStatus=await page.evaluate(async()=>{const r=await fetch('/__qa/worker',{method:'POST'});return r.status;});
+  assert.equal(workerStatus,200);
   const queue=sql("select id from crm_automation_queue where source_type='task' and source_id='"+id+"'");
   await page.goto(origin+'/followups?case='+queue);await page.locator('[data-id=\"'+queue+'\"]').click();
   await page.locator('#outcome').selectOption('rescheduled');await page.locator('#rescheduleDate').fill('2099-01-02');
@@ -82,6 +83,21 @@ try{
   await page.locator('#modalBack').waitFor({state:'hidden'});
   assert.equal(sql("select count(*) from crm_app_state,jsonb_array_elements(data->'tasks') t where t->>'date'='2099-01-02' and t->>'time'='15:30'"),'1');
   assert.equal(sql("select status from crm_automation_queue where id='"+queue+"'"),'completed');
+ });
+ await check('survey first response survives conflict and recovery closes through operator UI',async()=>{
+  const lead=sql("select data->'leads'->0->>'id' from crm_app_state");
+  const experience=sql("select register_customer_experience_request('homologation','qa-ui-recovery','"+lead+"','00000000000','QA','Pilates','{}')");
+  sql("update crm_customer_experience set status='awaiting_response',requested_at=now(),request_provider_message_id='qa-ui-request' where id='"+experience+"'");
+  sql("select record_customer_experience_response('qa-ui-response','00000000000','qa-ui-request','needs_improvement','Poderia melhorar')");
+  sql("select record_customer_experience_response('qa-ui-response-second','00000000000','qa-ui-request','very_good','Excelente')");
+  assert.equal(sql("select satisfaction from crm_customer_experience where id='"+experience+"'"),'needs_improvement');
+  await page.evaluate(()=>fetch('/__qa/worker',{method:'POST'}));
+  const queue=sql("select recovery_queue_id from crm_customer_experience where id='"+experience+"'");
+  await page.goto(origin+'/followups?case='+queue);await page.locator('[data-id=\"'+queue+'\"]').click();
+  await page.locator('#outcome').selectOption('resolved');await page.locator('#note').fill('Synthetic recovery completed');
+  await page.locator('#saveResult').click();await page.locator('#modalBack').waitFor({state:'hidden'});
+  assert.equal(sql("select status from crm_customer_experience where id='"+experience+"'"),'review_pending');
+  assert.equal(sql("select count(*) from crm_automation_queue where source_id='"+experience+"' and event_type='review_invitation' and status='pending'"),'1');
  });
  await check('two concurrent operators receive one success and one revision conflict',async()=>{
   const base=await cloud(page);const payload={data:base.data.data,revision:base.data.revision};
@@ -101,6 +117,23 @@ try{
   await page.locator('#toast').filter({hasText:'somente neste navegador'}).waitFor();assert.equal(sql('select revision from crm_app_state'),before);
   await c.setOffline(false);await page.reload();await page.waitForFunction(()=>document.querySelector('#dbStatus').textContent.includes('dados na nuvem'));
   assert.equal(sql("select count(*) from crm_app_state,jsonb_array_elements(data->'leads') l where l->>'name'='QA Offline Only'"),'0');
+ });
+ await check('lost save response preserves one committed record without duplicate retry',async()=>{
+  await page.evaluate(()=>saveQueue);
+  let lost=false;
+  const intercept=async route=>{
+   if(route.request().method()==='PUT'&&!lost){lost=true;await route.fetch();await route.abort('connectionfailed');}
+   else await route.continue();
+  };
+  await c.route('**/.netlify/functions/crm-state',intercept);
+  await page.getByRole('button',{name:'➕ Novo lead',exact:true}).click();
+  await page.locator('#leadForm [name=name]').fill('QA Response Lost');await page.locator('#leadForm [name=phone]').fill('00000000000');
+  await page.getByRole('button',{name:'Salvar lead',exact:true}).click();
+  await page.locator('#toast').filter({hasText:'somente neste navegador'}).waitFor();
+  await c.unroute('**/.netlify/functions/crm-state',intercept);
+  assert.equal(sql("select count(*) from crm_app_state,jsonb_array_elements(data->'leads') l where l->>'name'='QA Response Lost'"),'1');
+  await page.reload();await page.waitForFunction(()=>document.querySelector('#dbStatus').textContent.includes('dados na nuvem'));
+  assert.equal((await cloud(page)).data.data.leads.filter(x=>x.name==='QA Response Lost').length,1);
  });
  await check('logout rejects subsequent authenticated reads',async()=>{
   assert.equal((await page.evaluate(async()=>{const r=await fetch('/.netlify/functions/crm-state?action=logout',{method:'POST'});return r.status;})),200);
