@@ -116,7 +116,7 @@ Os estados abaixo descrevem o escopo completo solicitado, distinguindo aprovaç�
 | Pesquisa de satisfação | APROVADO | Unitários e SQL, incluindo primeira resposta |
 | Segurança | REPROVADO | Cookie malformado ainda afeta a versão publicada; restante limitado ao escopo verificado |
 | Integração entre componentes | BLOQUEADO | Falta E2E integral e confirmação de equivalência completa do schema |
-| Interface | BLOQUEADO | Quatro páginas com sintaxe válida; navegador indisponível |
+| Interface | BLOQUEADO | Quatro páginas com sintaxe válida e tela de login inspecionada no navegador remoto; E2E autenticado/mobile pendente |
 | Recuperação de falhas | BLOQUEADO | Retries e locks aprovados; HTTP 500 sem causa comprovada |
 | Prontidão para produção | BLOQUEADO | Correção pendente, E2E incompleto e incidente aberto |
 
@@ -135,6 +135,10 @@ Os estados abaixo descrevem o escopo completo solicitado, distinguindo aprovaç�
 
 ## Limitações e continuidade
 
-A instalação local de PostgreSQL falhou por restrições do ambiente; a alternativa executada com sucesso foi a CI em banco efêmero. Playwright estava disponível, mas sem executável de navegador; o download de Chromium retornou arquivo inválido e falhou. Assim, não houve teste visual nem screenshot desktop/mobile.
+A instalação local de PostgreSQL falhou por restrições do ambiente; a alternativa executada com sucesso foi a CI em banco efêmero. Playwright estava disponível, mas sem executável de navegador; o download de Chromium retornou arquivo inválido e falhou. Como alternativa, o navegador remoto abriu o CRM oficial e permitiu verificar visualmente a tela de acesso desktop e o campo de senha, sem autenticar ou alterar dados. Não houve validação das telas autenticadas ou mobile. O navegador remoto não oferece aqui a interceptação de rede necessária para o E2E isolado com mocks; o navegador local permaneceu indisponível.
 
 Este relatório distingue os resultados desta sessão de afirmações anteriores: os antigos relatos de salvamento após login e testes manuais não foram contabilizados como novos testes. Não houve uso das credenciais reais nos mocks. Nenhuma alteração de produção foi executada.
+
+## Verificação complementar final
+
+O mock de rejeição WhatsApp passou para HTTP 400, 401, 403, 429 e 500; total permanece 106 casos Node. As novas execuções de CI do commit `1d54a9f30648d94c924dbcecdca1fbbaa253e8ed` estão em https://github.com/edisonpassos-netizen/crm-instituto-pamela-pastore/actions/runs/39304512921 e https://github.com/edisonpassos-netizen/crm-instituto-pamela-pastore/actions/runs/39304512825 . A consulta final de leitura manteve revisão 42, fila 20 e tentativas 22.
