@@ -74,8 +74,9 @@ try{
   const base=await cloud(page);const id=crypto.randomUUID();
   base.data.data.tasks.push({id,leadId:base.data.data.leads[0].id,date:'2026-10-19',time:'09:00',type:'Retorno',done:false,note:'QA operator fixture'});
   assert.equal((await cloud(page,'PUT',{data:base.data.data,revision:base.data.revision})).status,200);
-  const workerStatus=await page.evaluate(async()=>{const r=await fetch('/__qa/worker',{method:'POST'});return r.status;});
-  assert.equal(workerStatus,200);
+  const workerStatuses=await page.evaluate(async()=>Promise.all([1,2].map(async()=>{const r=await fetch('/__qa/worker',{method:'POST'});return r.status;})));
+  assert.deepEqual(workerStatuses,[200,200]);
+  assert.equal(sql("select attempts from crm_automation_queue where source_type='task' and source_id='"+id+"'"),'1');
   const queue=sql("select id from crm_automation_queue where source_type='task' and source_id='"+id+"'");
   await page.goto(origin+'/followups?case='+queue);await page.locator('[data-id=\"'+queue+'\"]').click();
   await page.locator('#outcome').selectOption('rescheduled');await page.locator('#rescheduleDate').fill('2099-01-02');
@@ -93,7 +94,7 @@ try{
   assert.equal(sql("select satisfaction from crm_customer_experience where id='"+experience+"'"),'needs_improvement');
   await page.evaluate(()=>fetch('/__qa/worker',{method:'POST'}));
   const queue=sql("select recovery_queue_id from crm_customer_experience where id='"+experience+"'");
-  await page.goto(origin+'/followups?case='+queue);await page.locator('[data-id=\"'+queue+'\"]').click();
+  await page.goto(origin+'/followups?case='+queue);await page.locator('#modalBack').waitFor({state:'visible'});
   await page.locator('#outcome').selectOption('resolved');await page.locator('#note').fill('Synthetic recovery completed');
   await page.locator('#saveResult').click();await page.locator('#modalBack').waitFor({state:'hidden'});
   assert.equal(sql("select status from crm_customer_experience where id='"+experience+"'"),'review_pending');
