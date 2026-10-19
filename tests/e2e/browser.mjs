@@ -59,6 +59,30 @@ try{
   const fresh=await context();const p=await fresh.newPage();await login(p);
   const r=await cloud(p);assert.equal(r.data.data.leads[0].name,'QA Edited Lead');assert.equal(r.data.data.tasks[0].done,true);await fresh.close();
  });
+ await check('attendance UI records completion without consent and without survey queue',async()=>{
+  await page.goto(origin+'/atendimentos');await page.locator('#app').waitFor({state:'visible'});
+  await page.locator('#attendanceNote').fill('Synthetic attendance');await page.locator('#createAttendance').click();
+  await page.getByText('Atendimento registrado.',{exact:true}).waitFor();
+  await page.locator('[data-complete]').click();await page.locator('#completeNote').fill('Synthetic completion without consent');
+  await page.locator('#confirmComplete').click();await page.locator('#completeBack').waitFor({state:'hidden'});
+  assert.equal(sql("select data->'attendances'->0->>'status' from crm_app_state"),'Concluído');
+  assert.equal(sql("select data->'attendances'->0->>'experienceConsent' from crm_app_state"),'false');
+  assert.equal(sql("select count(*) from crm_customer_experience where source_type='attendance' and source_id=(select data->'attendances'->0->>'id' from crm_app_state)"),'0');
+ });
+ await check('operator queue UI reschedules a task atomically',async()=>{
+  // A synthetic fixture enters the operator-ready state; no production worker is invoked.
+  const base=await cloud(page);const id=crypto.randomUUID();
+  base.data.data.tasks.push({id,leadId:base.data.data.leads[0].id,date:'2026-10-19',time:'09:00',type:'Retorno',done:false,note:'QA operator fixture'});
+  assert.equal((await cloud(page,'PUT',{data:base.data.data,revision:base.data.revision})).status,200);
+  sql("update crm_automation_queue set status='awaiting_operator' where source_type='task' and source_id='"+id+"'");
+  const queue=sql("select id from crm_automation_queue where source_type='task' and source_id='"+id+"'");
+  await page.goto(origin+'/followups?case='+queue);await page.locator('[data-id=\"'+queue+'\"]').click();
+  await page.locator('#outcome').selectOption('rescheduled');await page.locator('#rescheduleDate').fill('2099-01-02');
+  await page.locator('#rescheduleTime').fill('15:30');await page.locator('#note').fill('Synthetic reschedule');await page.locator('#saveResult').click();
+  await page.locator('#modalBack').waitFor({state:'hidden'});
+  assert.equal(sql("select count(*) from crm_app_state,jsonb_array_elements(data->'tasks') t where t->>'date'='2099-01-02' and t->>'time'='15:30'"),'1');
+  assert.equal(sql("select status from crm_automation_queue where id='"+queue+"'"),'completed');
+ });
  await check('two concurrent operators receive one success and one revision conflict',async()=>{
   const base=await cloud(page);const payload={data:base.data.data,revision:base.data.revision};
   const results=await Promise.all([cloud(page,'PUT',payload),cloud(page,'PUT',payload)]);
@@ -70,7 +94,7 @@ try{
  });
  await check('offline UI warns instead of claiming cloud persistence; database remains unchanged',async()=>{
   // Reload after API concurrency tests so UI revision is current.
-  await page.reload();await page.getByRole('button',{name:'👥 Leads',exact:true}).click();
+  await page.goto(origin);await page.getByRole('button',{name:'👥 Leads',exact:true}).click();
   const before=sql('select revision from crm_app_state');await c.setOffline(true);
   await page.getByRole('button',{name:'➕ Novo lead',exact:true}).click();await page.locator('#leadForm [name=name]').fill('QA Offline Only');
   await page.locator('#leadForm [name=phone]').fill('00000000000');await page.getByRole('button',{name:'Salvar lead',exact:true}).click();

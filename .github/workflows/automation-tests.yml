@@ -66,6 +66,10 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610130006_atomic_manual_queue_resolution.sql
       - name: Test manual resolution state, audit trail, conflicts, and grants
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/manual-queue-resolution.sql
+      - name: Apply existing inbound and manual task synchronization migrations
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610150004_whatsapp_inbound_messages.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261015193500_manual_result_task_sync.sql
       - name: Apply customer experience workflow migrations
         run: |
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/202610160001_customer_experience_flow.sql
@@ -99,6 +103,8 @@ jobs:
       - name: Test first response protection and survey correlation
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/first-experience-response.sql
 
+      - name: Test independent concurrent claims and expired lock recovery
+        run: node tests/e2e/claim-concurrency.mjs
       - name: Export and compare effective schema definitions
         run: |
           psql -X -t -A -v ON_ERROR_STOP=1 -f tests/sql/schema-manifest.sql > /tmp/crm-ephemeral-schema.json
@@ -110,6 +116,8 @@ jobs:
         run: |
           npm install --prefix /tmp/crm-qa --ignore-scripts playwright@1.62.1
           /tmp/crm-qa/node_modules/.bin/playwright install --with-deps chromium
+      - name: Reset disposable fixtures after SQL regression suites
+        run: psql -v ON_ERROR_STOP=1 -f tests/sql/e2e-fixtures.sql
       - name: Start isolated PostgREST and application
         run: |
           docker run -d --name crm-e2e-rest --network host -e PGRST_DB_URI=postgres://postgres:test-only-password@127.0.0.1:5432/automation_test -e PGRST_DB_ANON_ROLE=anon -e PGRST_DB_SCHEMAS=public -e PGRST_JWT_SECRET=ephemeral-jwt-signing-key-for-crm-e2e-only postgrest/postgrest:v12.2.3
