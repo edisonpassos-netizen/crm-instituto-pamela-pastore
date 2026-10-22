@@ -1,0 +1,83 @@
+{
+  "tables": {
+    "production": 5,
+    "ephemeral": 5,
+    "missing": [],
+    "extra": [],
+    "different": []
+  },
+  "columns": {
+    "production": 70,
+    "ephemeral": 70,
+    "missing": [],
+    "extra": [],
+    "different": []
+  },
+  "constraints": {
+    "production": 24,
+    "ephemeral": 23,
+    "missing": [
+      "crm_app_state|crm_app_state_revision_check"
+    ],
+    "extra": [],
+    "different": []
+  },
+  "indexes": {
+    "production": 21,
+    "ephemeral": 21,
+    "missing": [],
+    "extra": [],
+    "different": []
+  },
+  "functions": {
+    "production": 15,
+    "ephemeral": 15,
+    "missing": [],
+    "extra": [],
+    "different": []
+  },
+  "triggers": {
+    "production": 1,
+    "ephemeral": 1,
+    "missing": [],
+    "extra": [],
+    "different": []
+  },
+  "policies": {
+    "production": 5,
+    "ephemeral": 6,
+    "missing": [],
+    "extra": [
+      "crm_app_state|deny public access to crm app state"
+    ],
+    "different": []
+  },
+  "grants": {
+    "production": 35,
+    "ephemeral": 15,
+    "missing": [
+      "crm_app_state|service_role|DELETE",
+      "crm_app_state|service_role|INSERT",
+      "crm_app_state|service_role|REFERENCES",
+      "crm_app_state|service_role|TRIGGER",
+      "crm_app_state|service_role|TRUNCATE",
+      "crm_automation_attempts|service_role|REFERENCES",
+      "crm_automation_attempts|service_role|TRIGGER",
+      "crm_automation_attempts|service_role|TRUNCATE",
+      "crm_automation_queue|service_role|REFERENCES",
+      "crm_automation_queue|service_role|TRIGGER",
+      "crm_automation_queue|service_role|TRUNCATE",
+      "crm_customer_experience|service_role|DELETE",
+      "crm_customer_experience|service_role|REFERENCES",
+      "crm_customer_experience|service_role|TRIGGER",
+      "crm_customer_experience|service_role|TRUNCATE",
+      "crm_whatsapp_messages|service_role|DELETE",
+      "crm_whatsapp_messages|service_role|REFERENCES",
+      "crm_whatsapp_messages|service_role|TRIGGER",
+      "crm_whatsapp_messages|service_role|TRUNCATE",
+      "crm_whatsapp_messages|service_role|UPDATE"
+    ],
+    "extra": [],
+    "different": []
+  }
+}

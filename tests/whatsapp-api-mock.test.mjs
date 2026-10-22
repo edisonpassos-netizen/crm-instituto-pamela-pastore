@@ -75,12 +75,14 @@ test('WhatsApp API rejection is surfaced without exposing credentials', async ()
   process.env.WHATSAPP_TEST_MODE = 'true';
   process.env.WHATSAPP_TEST_RECIPIENTS = '5515999999999';
   delete process.env.WHATSAPP_OUTBOUND_MODE;
-  globalThis.fetch = async () => fakeResponse(400, { error: { code: 132000, message: 'template parameter mismatch' } });
   try {
-    await assert.rejects(
-      __test.sendWhatsAppTemplate({ recipient_phone: '5515999999999', payload: {} }),
-      error => error.status === 400 && /132000/.test(error.message) && !/test-token-not-real/.test(error.message)
-    );
+    for (const status of [400, 401, 403, 429, 500]) {
+      globalThis.fetch = async () => fakeResponse(status, { error: { code: 132000, message: 'synthetic API rejection' } });
+      await assert.rejects(
+        __test.sendWhatsAppTemplate({ recipient_phone: '5515999999999', payload: {} }),
+        error => error.status === status && /132000/.test(error.message) && !/test-token-not-real/.test(error.message)
+      );
+    }
   } finally {
     globalThis.fetch = previous.fetch;
     if (previous.token === undefined) delete process.env.WHATSAPP_ACCESS_TOKEN; else process.env.WHATSAPP_ACCESS_TOKEN = previous.token;
