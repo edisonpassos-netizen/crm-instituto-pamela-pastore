@@ -137,6 +137,20 @@ try{
   await page.reload();await page.waitForFunction(()=>document.querySelector('#dbStatus').textContent.includes('dados na nuvem'));
   assert.equal((await cloud(page)).data.data.leads.filter(x=>x.name==='QA Response Lost').length,1);
  });
+ await check('WhatsApp inbox uses authenticated backend and renders untrusted text safely',async()=>{
+  sql("select public.ingest_crm_lead_message('e2e-inbox-synthetic','888888','5515999990001','QA Inbox','text','<img src=x onerror=alert(1)> Quero Pilates',now(),'{}')");
+  await page.goto(origin+'/conversas.html');
+  await page.locator('#messages article').waitFor();
+  assert.ok((await page.locator('#messages').innerText()).includes('<img src=x onerror=alert(1)>'));
+  assert.equal(await page.locator('#messages img').count(),0);
+  await page.locator('#phone').fill('5515999990001');await page.locator('#refresh').click();
+  await page.waitForFunction(()=>!document.querySelector('#refresh').disabled);
+  assert.equal(await page.locator('#messages article').count(),1);
+  await page.locator('#phone').fill('123');await page.locator('#refresh').click();
+  await page.locator('#error').filter({hasText:'país e DDD'}).waitFor();
+  await page.goto(origin);
+  await page.waitForFunction(()=>document.querySelector('#dbStatus').textContent.includes('dados na nuvem'));
+ });
  await check('logout rejects subsequent authenticated reads',async()=>{
   assert.equal((await page.evaluate(async()=>{const r=await fetch('/.netlify/functions/crm-state?action=logout',{method:'POST'});return r.status;})),200);
   assert.equal((await cloud(page)).status,401);
