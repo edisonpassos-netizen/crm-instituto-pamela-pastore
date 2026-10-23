@@ -131,6 +131,6 @@ A CI também cria PostgreSQL efêmero e valida migrations, RLS, satisfação, re
 - A captura de leads é independente do envio: `WHATSAPP_LEAD_CAPTURE_ENABLED=true` e `WHATSAPP_LEAD_PHONE_NUMBER_IDS` (IDs verificados, separados por vírgula) são ambos obrigatórios.
 - A função transacional `ingest_crm_lead_message` grava mensagem e lead na mesma transação, serializa alterações do estado e preserva campos comerciais de contatos existentes.
 - Somente mensagens novas do canal permitido são candidatas; respostas de pesquisa/contextuais e eventos de sistema não criam leads.
-- Origem Meta Ads exige `referral.source_type=ad`; mensagens sem esse metadado ficam como WhatsApp. Não há atribuição inventada de campanha.
+- Origem Meta Ads exige `referral.source_type=ad`; mensagens sem esse metadado são armazenadas sem criar novo lead. Contatos que já existem podem ter o histórico atualizado. Não há atribuição inventada de campanha.
 - Este módulo não envia mensagens nem implementa atendimento por IA. O canal real, o provedor de IA e a operação externa ainda exigem homologação própria.
 - Captura permanece desligada até confirmar o número pessoal que recebe os anúncios.

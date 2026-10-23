@@ -104,7 +104,9 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/first-experience-response.sql
 
       - name: Apply atomic inbound lead capture
-        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261023144838_atomic_whatsapp_lead_capture.sql
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261023144838_atomic_whatsapp_lead_capture.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261023145741_restrict_new_leads_to_ad_referrals.sql
       - name: Verify lead creation, idempotency and closed public access
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/whatsapp-lead-capture.sql
       - name: Test independent concurrent claims and expired lock recovery
