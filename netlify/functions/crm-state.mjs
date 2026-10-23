@@ -249,6 +249,22 @@ export default async request => {
     }
   }
 
+  if (action === 'whatsapp-messages' && request.method === 'GET') {
+    if (!validSession(request)) return json(401, { error: 'Sessão expirada. Entre novamente no CRM.' }, cors);
+    const phone = String(url.searchParams.get('phone') || '');
+    if (phone && !/^[0-9]{10,15}$/.test(phone)) return json(400, { error: 'Telefone inválido.' }, cors);
+    try {
+      const filter = phone ? '&contact_wa_id=eq.' + phone : '';
+      const rows = await supabaseAutomationRequest('crm_whatsapp_messages?select=id,direction,phone_number_id,contact_wa_id,contact_name,message_type,text_body,provider_timestamp,created_at&order=created_at.desc,id.desc&limit=200' + filter);
+      return json(200, { items: Array.isArray(rows) ? rows : [], limit: 200,
+        leadCaptureEnabled: process.env.WHATSAPP_LEAD_CAPTURE_ENABLED === 'true',
+        outboundMode: ['test','production'].includes(process.env.WHATSAPP_OUTBOUND_MODE) ? process.env.WHATSAPP_OUTBOUND_MODE : 'disabled'
+      }, cors);
+    } catch {
+      return json(503, { error: 'Não foi possível consultar as mensagens. Tente atualizar.' }, cors);
+    }
+  }
+
   if (action === 'automation-queue' && request.method === 'GET') {
     if (!validSession(request)) return json(401, { error: 'Sessão expirada ou não autenticada.' }, cors);
     const queueId = url.searchParams.get('queueId');

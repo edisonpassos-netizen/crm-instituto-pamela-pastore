@@ -65,6 +65,7 @@ label{font-size:12px;font-weight:700;color:#536164;display:block;margin-bottom:5
     <small>CRM Comercial • Funil de Vendas</small>
   </div>
   <div class="nav" id="nav">
+    <button type="button" id="conversationsNav">💬 Conversas</button>
     <button data-page="dashboard">🏠 Dashboard</button>
     <button data-page="leads">👥 Leads</button>
     <button data-page="pipeline">🎯 Funil</button>
@@ -137,12 +138,13 @@ function showLogin(message=""){
  if(field)field.focus();
 }
 async function startCRM(){
- document.getElementById("authGate").style.display="none";
  try{
    await openDB();
    document.documentElement.style.setProperty("--primary",state.settings.primary||"#1A8690");
    render();
+   document.getElementById("authGate").style.display="none";
  }catch(e){
+   document.getElementById("authGate").style.display="none";
    setDbStatus("Erro ao abrir armazenamento local","error");
    document.getElementById("view").innerHTML="<div class='section'><b>Não foi possível inicializar o CRM.</b><p>"+esc(e.message)+"</p><button class='btn primary' onclick='location.reload()'>Tentar novamente</button></div>";
  }
@@ -469,6 +471,7 @@ function settings(v){v.innerHTML=`<div class="section"><h2>⚙️ Configuraçõe
 function demoData(){if(state.leads.length&& !confirm("Adicionar dados de demonstração aos dados existentes?"))return;["Ana Souza","Mariana Oliveira","Juliana Costa","Carla Mendes","Fernanda Lima","Renata Alves","Patricia Santos","Camila Rocha","Luciana Dias","Beatriz Martins"].forEach((n,i)=>state.leads.push({id:id(),name:n,phone:"1599"+String(620000+i).slice(-6),email:"",service:services[i%services.length],source:sources[i%sources.length],campaign:"Campanha demonstração",status:stages[i%stages.length],temperature:["Frio","Morno","Quente"][i%3],createdAt:new Date(Date.now()-i*86400000).toISOString(),interest:i>1,priceAsked:i>2,requestedTime:i>3,appointment:i>4,attended:i>5,bought:i>7,notes:""}));saveStore();toast("Dados de demonstração carregados");render()}
 function clearData(){if(confirm("ATENÇÃO: apagar todos os dados locais? Faça backup antes.")){state={id:"state",page:"dashboard",leads:[],tasks:[],sales:[],settings:{studioName:"Studio Pâmela Pastore",primary:"#1A8690"}};saveStore();render()}}
 document.getElementById("logo").src="data:image/jpeg;base64,"+LOGO_B64;
+document.getElementById("conversationsNav").addEventListener("click",()=>{location.href="/conversas.html"});
 document.getElementById("nav").addEventListener("click",e=>{const b=e.target.closest("button[data-page]");if(b)setPage(b.dataset.page)});
 (async()=>{try{if(await checkCRMAuth())await startCRM();else showLogin()}catch(e){showLogin("Servidor de autenticação indisponível. Confira o deploy e as variáveis do Netlify.")}})();
 </script>

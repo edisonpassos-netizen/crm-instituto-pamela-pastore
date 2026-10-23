@@ -125,3 +125,12 @@ A CI também cria PostgreSQL efêmero e valida migrations, RLS, satisfação, re
 > Pré-produção permanece `disabled`, restrita ao Brasil (`55`) e preparada para `pt_BR`.
 > Runtime republicado após configurar `CUSTOMER_EXPERIENCE_ENABLED=false`; o módulo está instalado, porém não cria novas pesquisas até ativação explícita.
 > Templates de produção pré-configurados no Netlify em 16/10/2026: `pesquisa_experiencia_pos_atendimento_v1` e `avaliacao_google_pos_atendimento_v1`, ambos `pt_BR`, atualmente aguardando aprovação da Meta.
+
+## Conversas e captura de leads (23/10/2026)
+- `/conversas.html` mostra até 200 mensagens recentes ao operador autenticado, sem expor payloads brutos.
+- A captura de leads é independente do envio: `WHATSAPP_LEAD_CAPTURE_ENABLED=true` e `WHATSAPP_LEAD_PHONE_NUMBER_IDS` (IDs verificados, separados por vírgula) são ambos obrigatórios.
+- A função transacional `ingest_crm_lead_message` grava mensagem e lead na mesma transação, serializa alterações do estado e preserva campos comerciais de contatos existentes.
+- Somente mensagens novas do canal permitido são candidatas; respostas de pesquisa/contextuais e eventos de sistema não criam leads.
+- Origem Meta Ads exige `referral.source_type=ad`; mensagens sem esse metadado são armazenadas sem criar novo lead. Contatos que já existem podem ter o histórico atualizado. Não há atribuição inventada de campanha.
+- Este módulo não envia mensagens nem implementa atendimento por IA. O canal real, o provedor de IA e a operação externa ainda exigem homologação própria.
+- Captura permanece desligada até confirmar o número pessoal que recebe os anúncios.

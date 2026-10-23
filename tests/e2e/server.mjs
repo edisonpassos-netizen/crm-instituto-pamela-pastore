@@ -30,7 +30,7 @@ globalThis.fetch = (input, options) => {
 };
 const { default: handler } = await import('../../netlify/functions/crm-state.mjs');
 const { default: worker } = await import('../../netlify/functions/automation-worker.mjs');
-const pages = new Map([['/','index.html'],['/followups','followups-operacionais.html'],['/atendimentos','atendimentos-operacionais.html'],['/operacao','operacao.html']]);
+const pages = new Map([['/conversas.html','conversas.html'],['/','index.html'],['/followups','followups-operacionais.html'],['/atendimentos','atendimentos-operacionais.html'],['/operacao','operacao.html']]);
 const server = https.createServer({key:await readFile('/tmp/crm-e2e-key.pem'),cert:await readFile('/tmp/crm-e2e-cert.pem')},async(req,res)=>{
   try {
     const url = new URL(req.url,origin);
