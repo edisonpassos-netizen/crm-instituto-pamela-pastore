@@ -103,6 +103,10 @@ jobs:
       - name: Test first response protection and survey correlation
         run: psql -v ON_ERROR_STOP=1 -f tests/sql/first-experience-response.sql
 
+      - name: Apply atomic inbound lead capture
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261023144838_atomic_whatsapp_lead_capture.sql
+      - name: Verify lead creation, idempotency and closed public access
+        run: psql -v ON_ERROR_STOP=1 -f tests/sql/whatsapp-lead-capture.sql
       - name: Test independent concurrent claims and expired lock recovery
         run: node tests/e2e/claim-concurrency.mjs
       - name: Export and compare effective schema definitions

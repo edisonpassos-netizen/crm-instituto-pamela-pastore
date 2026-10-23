@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Conversas — Instituto Pâmela Pastore</title>
+<style>
+:root{font:16px system-ui;color:#183d41;background:#f4f7f7}*{box-sizing:border-box}
+body{margin:0}header{background:#0d5559;color:white;padding:24px max(20px,calc((100vw - 1100px)/2))}
+header a{color:white}h1{margin:12px 0}main{max-width:1100px;margin:24px auto;padding:0 20px}
+.bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center}input,button,a.btn{font:inherit;padding:10px 14px;border:1px solid #b7ccce;border-radius:8px}
+button{background:#1b8289;color:white;cursor:pointer}button:disabled{opacity:.6}input{flex:1;min-width:180px}
+#status{padding:14px;background:#e4eeee;border-radius:8px;margin:16px 0}#messages{display:grid;gap:12px}
+article{background:white;padding:18px;border:1px solid #d9e5e5;border-radius:12px}article p{white-space:pre-wrap;overflow-wrap:anywhere}
+.meta{font-size:14px;color:#506d70}article a{color:#0d5559}#error{color:#a51e1e}
+</style></head><body>
+<header><a href="/">← CRM</a><h1>Conversas recebidas</h1><p>Histórico do canal conectado ao Instituto Pâmela Pastore</p></header>
+<main><div class="bar"><input id="phone" aria-label="Filtrar por telefone" placeholder="Telefone com país e DDD"><button id="refresh">Atualizar</button><a class="btn" href="/followups">Follow-ups</a></div>
+<div id="status" role="status">Carregando mensagens…</div><p id="error" role="alert"></p><div id="messages"></div>
+<p class="meta">Exibe até 200 mensagens recentes. Atualize para buscar novas mensagens. A abertura do WhatsApp permite continuar o atendimento manualmente.</p></main>
+<script>
+const endpoint='/.netlify/functions/crm-state?action=whatsapp-messages';
+const statusEl=document.getElementById('status'),errorEl=document.getElementById('error'),list=document.getElementById('messages'),button=document.getElementById('refresh');
+function node(tag,text,cls){const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n}
+async function load(){
+ button.disabled=true;errorEl.textContent='';
+ try{
+  const phone=document.getElementById('phone').value.replace(/\\D/g,'');
+  if(phone&&!/^\\d{10,15}$/.test(phone))throw Error('Informe o telefone com país e DDD, usando de 10 a 15 dígitos.');
+  const response=await fetch(endpoint+(phone?'&phone='+phone:''),{credentials:'same-origin',cache:'no-store'});
+  if(response.status===401){statusEl.replaceChildren(node('span','Sessão expirada. '));const a=node('a','Entrar no CRM');a.href='/';statusEl.append(a);list.replaceChildren();return}
+  const data=await response.json();if(!response.ok)throw Error(data.error||'Não foi possível carregar as conversas.');
+  statusEl.textContent=data.items.length+' mensagem(ns) recente(s). '+(data.outboundMode==='test'?'Canal em homologação. ':'')+(data.leadCaptureEnabled?'Cadastro automático habilitado para o canal configurado.':'Cadastro automático ainda não habilitado.');
+  list.replaceChildren();
+  for(const m of data.items){
+   const article=node('article','');
+   article.append(node('strong',m.contact_name||'Contato WhatsApp'));
+   article.append(node('div',(m.contact_wa_id||'')+' · '+(m.direction==='inbound'?'Recebida':'Enviada'),'meta'));
+   const date=new Date(m.provider_timestamp||m.created_at);
+   article.append(node('div',Number.isNaN(date.getTime())?'Data indisponível':date.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}),'meta'));
+   article.append(node('p',m.text_body||'Mensagem de '+(m.message_type||'mídia')));
+   if(/^\\d{10,15}$/.test(m.contact_wa_id||'')){const a=node('a','Continuar atendimento no WhatsApp');a.href='https://wa.me/'+m.contact_wa_id;a.target='_blank';a.rel='noopener noreferrer';article.append(a)}
+   list.append(article);
+  }
+ }catch(e){errorEl.textContent=e.message||'Falha ao consultar mensagens.'}finally{button.disabled=false}
+}
+button.addEventListener('click',load);
+document.getElementById('phone').addEventListener('keydown',e=>{if(e.key==='Enter')load()});
+load();
+</script></body></html>

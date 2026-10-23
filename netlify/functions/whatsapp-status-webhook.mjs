@@ -1,3 +1,4 @@
+import { shouldCaptureWhatsAppLead } from './lib/whatsapp-lead-capture.mjs';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { crmDatabaseConfig } from './lib/crm-database.mjs';
 import { classifyCustomerExperienceResponse } from './lib/customer-experience.mjs';
@@ -105,7 +106,7 @@ function extractInboundMessages(payload) {
 
 async function persistInboundMessage(message) {
   const { url: base, key } = config();
-  const response = await fetch(`${base}/rest/v1/rpc/ingest_whatsapp_inbound_message`, {
+  const response = await fetch(`${base}/rest/v1/rpc/${shouldCaptureWhatsAppLead(message) ? 'ingest_crm_lead_message' : 'ingest_whatsapp_inbound_message'}`, {
     method: 'POST',
     headers: serverHeaders(key, {
       'Content-Type': 'application/json', Accept: 'application/json'
