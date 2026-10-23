@@ -138,12 +138,13 @@ function showLogin(message=""){
  if(field)field.focus();
 }
 async function startCRM(){
- document.getElementById("authGate").style.display="none";
  try{
    await openDB();
    document.documentElement.style.setProperty("--primary",state.settings.primary||"#1A8690");
    render();
+   document.getElementById("authGate").style.display="none";
  }catch(e){
+   document.getElementById("authGate").style.display="none";
    setDbStatus("Erro ao abrir armazenamento local","error");
    document.getElementById("view").innerHTML="<div class='section'><b>Não foi possível inicializar o CRM.</b><p>"+esc(e.message)+"</p><button class='btn primary' onclick='location.reload()'>Tentar novamente</button></div>";
  }

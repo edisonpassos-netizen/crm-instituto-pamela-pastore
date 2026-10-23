@@ -33,6 +33,7 @@ try{
  await check('valid login uses secure HttpOnly session cookie',async()=>{
   await page.locator('#authPassword').fill('synthetic-e2e-password');await page.locator('#authSubmit').click();
   await page.locator('#authGate').waitFor({state:'hidden'});
+  assert.ok((await page.locator('#dbStatus').innerText()).includes('dados na nuvem'));
   const cookie=(await c.cookies()).find(x=>x.name==='crm_session');assert.ok(cookie.httpOnly&&cookie.secure&&cookie.sameSite==='Strict');
  });
  await check('create lead through UI writes physical PostgreSQL state',async()=>{
