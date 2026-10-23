@@ -22,8 +22,8 @@ function node(tag,text,cls){const n=document.createElement(tag);n.textContent=te
 async function load(){
  button.disabled=true;errorEl.textContent='';
  try{
-  const phone=document.getElementById('phone').value.replace(/\\D/g,'');
-  if(phone&&!/^\\d{10,15}$/.test(phone))throw Error('Informe o telefone com país e DDD, usando de 10 a 15 dígitos.');
+  const phone=document.getElementById('phone').value.replace(/[^0-9]/g,'');
+  if(phone&&!/^[0-9]{10,15}$/.test(phone))throw Error('Informe o telefone com país e DDD, usando de 10 a 15 dígitos.');
   const response=await fetch(endpoint+(phone?'&phone='+phone:''),{credentials:'same-origin',cache:'no-store'});
   if(response.status===401){statusEl.replaceChildren(node('span','Sessão expirada. '));const a=node('a','Entrar no CRM');a.href='/';statusEl.append(a);list.replaceChildren();return}
   const data=await response.json();if(!response.ok)throw Error(data.error||'Não foi possível carregar as conversas.');
@@ -36,7 +36,7 @@ async function load(){
    const date=new Date(m.provider_timestamp||m.created_at);
    article.append(node('div',Number.isNaN(date.getTime())?'Data indisponível':date.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}),'meta'));
    article.append(node('p',m.text_body||'Mensagem de '+(m.message_type||'mídia')));
-   if(/^\\d{10,15}$/.test(m.contact_wa_id||'')){const a=node('a','Continuar atendimento no WhatsApp');a.href='https://wa.me/'+m.contact_wa_id;a.target='_blank';a.rel='noopener noreferrer';article.append(a)}
+   if(/^[0-9]{10,15}$/.test(m.contact_wa_id||'')){const a=node('a','Continuar atendimento no WhatsApp');a.href='https://wa.me/'+m.contact_wa_id;a.target='_blank';a.rel='noopener noreferrer';article.append(a)}
    list.append(article);
   }
  }catch(e){errorEl.textContent=e.message||'Falha ao consultar mensagens.'}finally{button.disabled=false}

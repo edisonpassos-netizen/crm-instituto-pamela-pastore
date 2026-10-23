@@ -16,5 +16,6 @@ test('inbox enforces session before database access and never returns raw messag
   assert.equal((await handler(request('',false))).status,401);assert.equal(calls,0);
   assert.equal((await handler(request('&phone=1,or'))).status,400);assert.equal(calls,0);
   const response=await handler(request());assert.equal(response.status,200);assert.equal((await response.json()).items.length,1);assert.equal(calls,1);
+  const filtered=await handler(request('&phone=5515999990001'));assert.equal(filtered.status,200);assert.equal(calls,2);
  }finally{globalThis.fetch=saved.fetch;for(const [k,v]of [['CRM_SESSION_SECRET',saved.secret],['SUPABASE_URL',saved.url],['SUPABASE_SERVICE_ROLE_KEY',saved.key]]){if(v===undefined)delete process.env[k];else process.env[k]=v}}
 });

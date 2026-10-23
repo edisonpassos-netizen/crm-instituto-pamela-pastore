@@ -252,7 +252,7 @@ export default async request => {
   if (action === 'whatsapp-messages' && request.method === 'GET') {
     if (!validSession(request)) return json(401, { error: 'Sessão expirada. Entre novamente no CRM.' }, cors);
     const phone = String(url.searchParams.get('phone') || '');
-    if (phone && !/^\\d{10,15}$/.test(phone)) return json(400, { error: 'Telefone inválido.' }, cors);
+    if (phone && !/^[0-9]{10,15}$/.test(phone)) return json(400, { error: 'Telefone inválido.' }, cors);
     try {
       const filter = phone ? '&contact_wa_id=eq.' + phone : '';
       const rows = await supabaseAutomationRequest('crm_whatsapp_messages?select=id,direction,phone_number_id,contact_wa_id,contact_name,message_type,text_body,provider_timestamp,created_at&order=created_at.desc,id.desc&limit=200' + filter);
