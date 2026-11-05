@@ -73,13 +73,15 @@ function extractInboundMessages(payload) {
   for (const entry of payload?.entry || []) {
     for (const change of entry?.changes || []) {
       const value = change?.value || {};
+      const passive = change?.field === 'standby';
+      const content = passive ? value.standby || {} : value;
       const phoneNumberId = String(value?.metadata?.phone_number_id || '').trim();
       const contacts = new Map(
-        (Array.isArray(value?.contacts) ? value.contacts : [])
+        (Array.isArray(content?.contacts) ? content.contacts : [])
           .filter(contact => contact?.wa_id)
           .map(contact => [String(contact.wa_id), String(contact?.profile?.name || '').trim()])
       );
-      for (const message of value?.messages || []) {
+      for (const message of content?.messages || []) {
         const id = String(message?.id || '').trim();
         const from = String(message?.from || '').replace(/\D/g, '');
         const type = String(message?.type || '').trim();
@@ -96,12 +98,64 @@ function extractInboundMessages(payload) {
           responseKey: response.responseKey,
           contextMessageId: String(message?.context?.id || '').trim() || null,
           timestamp: Number.isFinite(timestamp) ? new Date(timestamp * 1000).toISOString() : null,
-          payload: message
+          payload: message,
+          ...(passive ? { passive: true } : {})
         });
       }
     }
   }
   return messages;
+}
+
+// Standby events are observations, never permission to take over or reply.
+function extractStandbyEchoes(payload) {
+  const messages = [];
+  for (const entry of payload?.entry || []) {
+    for (const change of entry?.changes || []) {
+      if (change?.field !== 'standby') continue;
+      const value = change?.value || {};
+      for (const echo of value.standby?.message_echoes || []) {
+        const message = echo?.message || {};
+        const id = String(echo?.id || '').trim();
+        const contactWaId = String(message.to || '').replace(/\D/g, '');
+        const type = String(message.type || '').trim();
+        if (!id || !/^\d{10,15}$/.test(contactWaId) || !type) continue;
+        const timestamp = Number(echo.timestamp);
+        const date = Number.isFinite(timestamp) ? new Date(timestamp * 1000) : null;
+        messages.push({
+          id, contactWaId, type, direction: 'outbound', passive: true,
+          phoneNumberId: String(value.metadata?.phone_number_id || '').trim(),
+          textBody: type === 'text' ? String(message.text?.body || '') : null,
+          timestamp: date && Number.isFinite(date.getTime()) ? date.toISOString() : null,
+          payload: echo
+        });
+      }
+    }
+  }
+  return messages;
+}
+
+async function persistStandbyEcho(message) {
+  const { url: base, key } = config();
+  const response = await fetch(`${base}/rest/v1/crm_whatsapp_messages?on_conflict=provider_message_id`, {
+    method: 'POST',
+    headers: serverHeaders(key, {
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=ignore-duplicates,return=representation'
+    }),
+    body: JSON.stringify({
+      provider_message_id: message.id.slice(0, 255), direction: 'outbound',
+      phone_number_id: message.phoneNumberId.slice(0, 100) || null,
+      contact_wa_id: message.contactWaId, contact_name: null,
+      message_type: message.type.slice(0, 80),
+      text_body: message.textBody === null ? null : message.textBody.slice(0, 4000),
+      provider_timestamp: message.timestamp, message_payload: message.payload
+    })
+  });
+  if (!response.ok) throw new Error(`Standby echo persistence failed (HTTP ${response.status}).`);
+  const rows = await response.json();
+  if (!Array.isArray(rows)) throw new Error('Invalid standby echo persistence response.');
+  return { inserted: rows.length > 0 };
 }
 
 async function persistInboundMessage(message) {
@@ -187,7 +241,7 @@ export default async request => {
       }
     }
   }
-  const inboundMessages = extractInboundMessages(payload);
+  const inboundMessages = [...extractInboundMessages(payload), ...extractStandbyEchoes(payload)];
 
   try {
     let updated = 0;
@@ -206,9 +260,11 @@ export default async request => {
     }
 
     for (const message of inboundMessages) {
-      const result = await persistInboundMessage(message);
+      const result = message.direction === 'outbound'
+        ? await persistStandbyEcho(message) : await persistInboundMessage(message);
       if (result?.inserted === true) {
         inserted += 1;
+        if (message.passive) continue;
         const experience = await recordExperienceResponse(message);
         if (experience.classified) experienceClassified += 1;
         if (experience.matched === true) experienceMatched += 1;
@@ -243,8 +299,12 @@ export const __test = {
   updateProviderStatus,
   inboundResponseFields,
   extractInboundMessages,
+  extractStandbyEchoes,
+  persistStandbyEcho,
   persistInboundMessage,
   recordExperienceResponse,
   serverHeaders,
   config
 };
+
+
