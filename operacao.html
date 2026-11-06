@@ -16,7 +16,7 @@
 <section id="app" class="hidden">
 <div class="card"><div class="toolbar"><button id="refresh" class="btn primary">Atualizar painel</button><span id="health" class="status">Verificando…</span><span id="updated" class="muted"></span></div><p class="muted">Este painel é apenas operacional. Ele não possui código de envio para WhatsApp ou Google.</p></div>
 <div id="kpis" class="grid"></div>
-<div class="card"><h2>Acessos operacionais</h2><div class="links"><a href="/"><b>CRM principal</b><span class="muted">Leads, funil, vendas e tarefas.</span></a><a href="/followups"><b>Fila de follow-ups</b><span class="muted">Contato manual e recuperação.</span></a><a href="/atendimentos"><b>Atendimentos</b><span class="muted">Registrar e concluir atendimentos.</span></a></div></div>
+<div class="card"><h2>Acessos operacionais</h2><div class="links"><a href="/conversas.html"><b>Conversas</b><span class="muted">Histórico de mensagens recebidas e respostas.</span></a><a href="/"><b>CRM principal</b><span class="muted">Leads, funil, vendas e tarefas.</span></a><a href="/followups"><b>Fila de follow-ups</b><span class="muted">Contato manual e recuperação.</span></a><a href="/atendimentos"><b>Atendimentos</b><span class="muted">Registrar e concluir atendimentos.</span></a></div></div>
 <div class="card"><h2>Fila aguardando operador</h2><div id="queue" class="queue"><div class="muted">Carregando…</div></div></div>
 <div class="card"><h2>Controles de segurança</h2><p class="muted">O painel confirma conectividade e volume operacional, mas não expõe segredos nem habilita automações externas. A ativação do WhatsApp de produção continua separada e fail-closed.</p></div>
 </section>
@@ -29,18 +29,30 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 async function request(url,options={}){const r=await fetch(url,{credentials:'same-origin',...options,headers:{Accept:'application/json',...(options.headers||{})}});const data=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(data.error||`Erro HTTP ${r.status}`);e.status=r.status;throw e}return data}
 async function api(action,options={}){return request(`${API}?action=${encodeURIComponent(action)}`,options)}
 function kpi(label,value){return `<div class="kpi"><span>${esc(label)}</span><b>${esc(value)}</b></div>`}
+function showLoadError(error){
+  $('health').textContent='Falha na atualização';$('health').className='status bad';
+  $('updated').textContent='Dados não atualizados. '+error.message;
+  $('kpis').innerHTML='';$('queue').textContent='Não foi possível carregar a fila. Tente atualizar novamente.';
+  if(error.status===401){$('app').classList.add('hidden');$('authCard').classList.remove('hidden');$('loginError').textContent='Sua sessão expirou. Entre novamente.'}
+}
 async function load(){
-  $('health').textContent='Verificando…';$('health').className='status';
+  $('health').textContent='Verificando…';$('health').className='status';$('refresh').disabled=true;
+  try{
   const [health,state,queue]=await Promise.all([api('health'),request(API),api('automation-queue')]);
   const s=state.data&&typeof state.data==='object'?state.data:{};const leads=Array.isArray(s.leads)?s.leads:[];const tasks=Array.isArray(s.tasks)?s.tasks:[];const sales=Array.isArray(s.sales)?s.sales:[];const attendances=Array.isArray(s.attendances)?s.attendances:[];const items=Array.isArray(queue.items)?queue.items:[];
   const pending=tasks.filter(t=>t&&t.done!==true).length;const completed=attendances.filter(a=>a?.status==='Concluído').length;const recoveries=items.filter(i=>i?.event_type==='service_recovery_required').length;
   $('kpis').innerHTML=[kpi('Leads',leads.length),kpi('Follow-ups pendentes',pending),kpi('Atendimentos concluídos',completed),kpi('Aguardando operador',items.length),kpi('Recuperações abertas',recoveries),kpi('Vendas registradas',sales.length),kpi('Revisão do estado',state.revision||'-'),kpi('Banco exclusivo',health.databaseProjectRef==='dxfzuxybubvnjertiowf'?'OK':'Verificar')].join('');
-  $('queue').innerHTML=items.length?items.map(item=>{const d=item.payload?.dispatch||{};return `<div class="queue-item"><b>${item.event_type==='service_recovery_required'?'Recuperação':'Follow-up'}</b> • ${esc(d.lead_name||'Cliente')}<br><span class="muted">${esc(d.task_date||'')}${d.task_time?' • '+esc(d.task_time):''}${d.service_name?' • '+esc(d.service_name):''}</span></div>`}).join(''):'<div class="muted">Nenhuma tarefa aguardando operador.</div>';
-  $('health').textContent='Banco e API disponíveis';$('health').className='status';$('updated').textContent='Atualizado agora';
+  $('queue').innerHTML=items.length?items.map(item=>{const d=item.payload?.dispatch||{};return `<div class="queue-item"><b>${item.event_type==='service_recovery_required'?'Recuperação':'Follow-up'}</b> • ${esc(d.lead_name||'Cliente')}<br><span class="muted">${esc(d.task_date||'')}${d.task_time?' • '+esc(d.task_time):''}${d.service_name?' • '+esc(d.service_name):''}</span><br><a class="btn" href="/followups?case=${encodeURIComponent(item.id)}">Abrir tarefa</a></div>`}).join(''):'<div class="muted">Nenhuma tarefa aguardando operador.</div>';
+  $('health').textContent='Banco e API disponíveis';$('health').className='status';$('updated').textContent='Atualizado em '+new Date().toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'});
+  }finally{$('refresh').disabled=false}
 }
-async function boot(){try{await api('session');$('authCard').classList.add('hidden');$('app').classList.remove('hidden');await load()}catch(e){$('app').classList.add('hidden');$('authCard').classList.remove('hidden');if(e.status!==401)$('loginError').textContent=e.message}}
+async function boot(){
+ try{await api('session')}catch(e){$('app').classList.add('hidden');$('authCard').classList.remove('hidden');if(e.status!==401)$('loginError').textContent=e.message;return}
+ $('authCard').classList.add('hidden');$('app').classList.remove('hidden');
+ try{await load()}catch(e){showLoadError(e)}
+}
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;$('loginError').textContent='';try{await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});$('password').value='';await boot()}catch(err){$('loginError').textContent=err.message}finally{b.disabled=false}});
-$('refresh').addEventListener('click',async()=>{try{await load()}catch(e){$('health').textContent='Falha de conexão';$('health').className='status bad';$('updated').textContent=e.message}});
+$('refresh').addEventListener('click',async()=>{try{await load()}catch(e){showLoadError(e)}});
 boot();
 </script>
 </body>
