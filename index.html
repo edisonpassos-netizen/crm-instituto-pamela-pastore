@@ -357,56 +357,66 @@ async function diagnoseImport(){
 }
 async function importFile(){
  const f=document.getElementById("fileIn").files[0];if(!f){toast("Selecione um arquivo");return}
- if(f.name.toLowerCase().endsWith(".csv")){const txt=await f.text();const rows=parseCSV(txt);mergeRows(rows);return}
- try{const rows=await parseXLSX(f);mergeRows(rows)}catch(e){document.getElementById("importMsg").innerHTML=`<span class="badge b-danger">Não foi possível ler este XLSX: ${esc(e.message)}</span>`}
+ try{const rows=f.name.toLowerCase().endsWith(".csv")?parseCSV(await f.text()):await parseXLSX(f);await mergeRows(rows)}catch(e){document.getElementById("importMsg").innerHTML=`<span class="badge b-danger">Não foi possível importar o arquivo: ${esc(e.message)}</span>`}
 }
 function normalizeKey(k){return String(k||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"")}
+function importPhone(value){let digits=String(value||"").replace(/\D/g,"");return digits.length===10||digits.length===11?"55"+digits:digits}
 function mapRow(r){
- let o={};
- for(const [k,v] of Object.entries(r)) o[normalizeKey(k)]=v;
- const name=o.nome||o.name||o.nomecompletodocliente||o.nomecompleto||"";
- const phoneByHeader=o.telefone||o.phone||o.whatsapp||o.celular||o.mobile||"";
- const service=o.servico||o.service||o.modalidade||"Outro";
- const source=o.origem||o.source||o.comonosconheceu||"Outro";
- const isPhoneLike=v=>{
-   const d=String(v??"").replace(/\D/g,"");
-   return d.length>=10 && d.length<=13;
- };
- let phone=phoneByHeader;
- const vals=Object.values(r), keys=Object.keys(r);
- if(!phone){
-   const idxSource=keys.findIndex(k=>normalizeKey(k)==="comonosconheceu");
-   const idxDateAula=keys.findIndex(k=>normalizeKey(k)==="datadaaula");
-   if(idxSource>=0 && idxDateAula>idxSource){
-     for(let i=idxSource+1;i<idxDateAula;i++){
-       if(isPhoneLike(vals[i])){phone=vals[i];break}
-     }
-   }
+ const fields=new Map(Object.entries(r).map(([key,value])=>[normalizeKey(key),String(value??"").trim()]));
+ const get=(...keys)=>keys.map(key=>fields.get(key)).find(value=>value!==undefined&&value!=="");
+ const x={name:get("nome","name","nomecompletodocliente","nomedocliente","nomecompleto")||""};
+ for(const [field,keys]of Object.entries({phone:["telefone","phone","whatsapp","celular","mobile"],email:["email"],service:["servico","service","modalidade"],source:["origem","source","comonosconheceu"],campaign:["campanha","campaign"],status:["etapa","status","leadstatus"],temperature:["temperatura","temperature"],notes:["comentarios","comentario","observacoes","notes"]})){
+  const value=get(...keys);if(value!==undefined)x[field]=value;
  }
- if(!phone){
-   const candidates=vals.filter(isPhoneLike);
-   phone=candidates.find(v=>String(v).replace(/\D/g,"").length===11)||candidates[0]||"";
- }
- const foi=String(o.foinaula||"").trim().toLowerCase()==="sim";
- const fechou=String(o.fechouplano||"").trim().toLowerCase()==="sim";
- return {
-   name:name||vals[2]||"",
-   phone:String(phone||"").trim(),
-   email:o.email||"",
-   service:service||"Outro",
-   source:source||"Outro",
-   campaign:o.campanha||o.campaign||"",
-   status:o.etapa||o.status||(fechou?"Venda realizada":foi?"Compareceu":"Novo lead"),
-   temperature:o.temperatura||o.temperature||"Morno",
-   appointment:foi, attended:foi, bought:fechou,
-   interest:true, priceAsked:false, requestedTime:false,
-   notes:o.comentarios||o.comentario||""
- };
+ if(!x.phone){const candidates=Object.entries(r).filter(([key])=>!key.trim()||key.startsWith("__blank_")).map(([,value])=>String(value||"").trim()).filter(value=>/^[0-9]{10,15}$/.test(importPhone(value)));if(candidates.length===1)x.phone=candidates[0]}
+ const boolean=(...keys)=>{const value=get(...keys);return value===undefined?undefined:/^(sim|true|1)$/i.test(value)?true:/^(n[aã]o|false|0)$/i.test(value)?false:undefined};
+ const attended=boolean("foinaaula","foinaula","compareceu","attended"),bought=boolean("fechouplano","comprou","bought");
+ if(attended!==undefined){x.attended=attended;x.appointment=attended}
+ if(bought!==undefined)x.bought=bought;
+ if(!x.status){if(bought===true)x.status="Venda realizada";else if(attended===true)x.status="Compareceu"}
+ if(x.status==="Venda realizada")x.bought=true;
+ if(x.status==="Compareceu"){x.attended=true;x.appointment=true}
+ return x;
 }
-function mergeRows(rows){let add=0,upd=0;rows.forEach(r=>{const x=mapRow(r);if(!x.name)return;let normalizedPhone=String(x.phone||"").replace(/\D/g,"");
- let ex=normalizedPhone ? state.leads.find(l=>String(l.phone||"").replace(/\D/g,"")===normalizedPhone) : null;
- if(!ex && x.name) ex=state.leads.find(l=>String(l.name||"").trim().toLowerCase()===String(x.name||"").trim().toLowerCase());if(ex){Object.assign(ex,x);upd++}else{state.leads.push({...x,id:id(),createdAt:new Date().toISOString(),interest:false,priceAsked:false,requestedTime:false,appointment:false,attended:false,bought:false});add++}});saveStore();document.getElementById("importMsg").innerHTML=`<span class="badge b-success">${add} importados • ${upd} atualizados • duplicados por telefone tratados</span>`;toast("Importação concluída")}
-function parseCSV(txt){let lines=txt.replace(/^\uFEFF/,"").split(/\r?\n/).filter(x=>x.trim());if(!lines.length)return[];const parse=l=>{let a=[],cur="",q=false;for(let i=0;i<l.length;i++){let c=l[i];if(c==='"'){if(q&&l[i+1]==='"'){cur+='"';i++}else q=!q}else if(c===","&&!q){a.push(cur);cur=""}else cur+=c}a.push(cur);return a};let h=parse(lines[0]);return lines.slice(1).map(l=>{let a=parse(l),o={};h.forEach((k,i)=>o[k]=a[i]||"");return o})}
+async function mergeRows(rows){
+ let add=0,upd=0,invalid=0,ambiguous=0;
+ for(const r of rows){
+  const x=mapRow(r);if(!x.name){invalid++;continue}
+  const phone=importPhone(x.phone);
+  if(x.phone&&!/^[0-9]{10,15}$/.test(phone)){invalid++;continue}
+  let matches=phone?state.leads.filter(l=>importPhone(l.phone)===phone):state.leads.filter(l=>!importPhone(l.phone)&&normalizeKey(l.name)===normalizeKey(x.name));
+  if(matches.length>1){ambiguous++;continue}
+  if(matches.length){Object.assign(matches[0],x);upd++}
+  else{state.leads.push({id:id(),createdAt:new Date().toISOString(),phone:"",email:"",service:"Outro",source:"Outro",campaign:"",status:"Novo lead",temperature:"Morno",interest:false,priceAsked:false,requestedTime:false,appointment:false,attended:false,bought:false,notes:"",...x});add++}
+ }
+ await saveStore();
+ document.getElementById("importMsg").innerHTML='<span class="badge b-success">'+add+' importados • '+upd+' atualizados</span><p>'+invalid+' registros inválidos ignorados • '+ambiguous+' registros ambíguos ignorados.</p>';
+ toast("Importação processada");
+}
+function parseCSV(txt){
+ const input=String(txt).replace(/^\uFEFF/,"");
+ let quoted=false,commas=0,semicolons=0;
+ for(let i=0;i<input.length;i++){const c=input[i];if(c==='"'){if(quoted&&input[i+1]==='"')i++;else quoted=!quoted}else if(!quoted){if(c==="\r"||c==="\n")break;if(c===",")commas++;if(c===";")semicolons++}}
+ const delimiter=semicolons>commas?";":",",records=[];
+ let row=[],value="";quoted=false;
+ const push=()=>{row.push(value);if(row.some(cell=>cell.trim()))records.push(row);row=[];value=""};
+ for(let i=0;i<input.length;i++){
+  const c=input[i];
+  if(c==='"'){if(quoted&&input[i+1]==='"'){value+='"';i++}else quoted=!quoted}
+  else if(c===delimiter&&!quoted){row.push(value);value=""}
+  else if((c==="\n"||c==="\r")&&!quoted){push();if(c==="\r"&&input[i+1]==="\n")i++}
+  else value+=c;
+ }
+ if(quoted)throw new Error("CSV inválido: há um campo com aspas não fechadas.");
+ push();if(!records.length)return[];
+ const headers=records.shift().map(header=>header.trim());
+ const named=headers.filter(Boolean).map(normalizeKey);
+ if(new Set(named).size!==named.length)throw new Error("CSV inválido: há colunas repetidas.");
+ return records.map((cells,index)=>{
+  if(cells.length>headers.length)throw new Error("CSV inválido: a linha "+(index+2)+" tem mais colunas que o cabeçalho.");
+  return Object.fromEntries(headers.flatMap((header,i)=>header?[[header,cells[i]||""]]:[]));
+ });
+}
 function u16(a,o){return a[o]|a[o+1]<<8}function u32(a,o){return (a[o]|a[o+1]<<8|a[o+2]<<16|a[o+3]<<24)>>>0}
 async function unzipStore(buf){const a=new Uint8Array(buf),out={};let p=0;while(p<a.length-4){if(u32(a,p)!==0x04034b50){p++;continue}let method=u16(a,p+8),cs=u32(a,p+18),ns=u16(a,p+26),es=u16(a,p+28),name=new TextDecoder().decode(a.slice(p+30,p+30+ns)),data=a.slice(p+30+ns+es,p+30+ns+es+cs);if(method===0)out[name]=data;else if(method===8&&"DecompressionStream"in window){let ds=new DecompressionStream("deflate-raw"),ab=await new Response(new Blob([data]).stream().pipeThrough(ds)).arrayBuffer();out[name]=new Uint8Array(ab)}else throw new Error("Navegador sem suporte a descompressão XLSX");p+=30+ns+es+cs}return out}
 function xmlText(s,tag){let m=s.match(new RegExp("<"+tag+"[^>]*>([\\s\\S]*?)</"+tag+">"));return m?m[1]:""}
@@ -477,4 +487,5 @@ document.getElementById("nav").addEventListener("click",e=>{const b=e.target.clo
 </script>
 </body>
 </html><script async src="/.netlify/scripts/hud?variant=public" data-nf-variant="public" data-netlify-site-id="5a9e4ca2-3560-4d14-a1e6-28abfcf1580d" data-app-host="app.netlify.com"></script>
+
 
